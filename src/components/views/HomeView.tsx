@@ -145,18 +145,18 @@ export function HomeView() {
               </div>
             </div>
 
-            {/* Illustration */}
+            {/* Foto Beranda - foto yang diupload */}
             <div className="relative">
               <div className="relative aspect-square max-w-md mx-auto">
                 {/* Soft background circle */}
                 <div className="absolute inset-0 rounded-full bg-gradient-to-br from-green-100 via-emerald-50 to-amber-50" />
-                <div className="absolute inset-8 rounded-full bg-white/60 backdrop-blur-sm" />
-
-                {/* Emoji illustration composition */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-[140px] sm:text-[180px] lg:text-[200px] animate-float-soft drop-shadow-md" role="img" aria-label="Ilustrasi keluarga makan sehat">
-                    🥗
-                  </div>
+                <div className="absolute inset-4 rounded-full bg-white/80 backdrop-blur-sm shadow-inner overflow-hidden">
+                  <img
+                    src="/images/foto-beranda.png"
+                    alt="Foto Beranda - Gerakan Edukasi Makanan Anak Sehat"
+                    title="Foto Beranda"
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
                 </div>
 
                 {/* Floating badges */}
@@ -196,6 +196,7 @@ export function HomeView() {
                   </div>
                 </div>
               </div>
+              <p className="text-center text-xs text-gray-500 mt-2 font-medium">Foto Beranda</p>
             </div>
           </div>
 

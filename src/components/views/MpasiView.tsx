@@ -10,6 +10,8 @@ interface AgeGroup {
   emoji: string;
   color: string;
   headerColor: string;
+  isiPiringkuImage?: string; // path ke Poster Isi Piringku
+  isiPiringkuAlt?: string;
   texture: string;
   frequency: string;
   portion: string;
@@ -25,6 +27,8 @@ const AGE_GROUPS: AgeGroup[] = [
     emoji: "🍼",
     color: "bg-pink-50 border-pink-200",
     headerColor: "bg-gradient-to-r from-pink-50 to-rose-50",
+    isiPiringkuImage: "/images/isi-piringku-6-8-bulan.jpg",
+    isiPiringkuAlt: "Poster Isi Piringku Bayi Balita Usia 6-8 Bulan",
     texture: "Puree halus, makanan lumat, tekstur sangat lembut. Bisa dimasak lalu dihaluskan dengan blender atau diayak.",
     frequency: "Mulai 1-2 kali sehari, dengan porsi kecil (2-3 sendok makan).",
     portion: "2-3 sendok makan per kali makan, lalu tingkatkan bertahap sesuai nafsu makan anak.",
@@ -48,6 +52,8 @@ const AGE_GROUPS: AgeGroup[] = [
     emoji: "🥣",
     color: "bg-amber-50 border-amber-200",
     headerColor: "bg-gradient-to-r from-amber-50 to-yellow-50",
+    isiPiringkuImage: "/images/isi-piringku-9-11-bulan.jpg",
+    isiPiringkuAlt: "Poster Isi Piringku Bayi Balita Usia 9-11 Bulan",
     texture: "Makanan lumat dengan potongan kecil, tekstur agak kasar. Tidak perlu dihaluskan sempurna, agar anak terlatih mengunyah.",
     frequency: "3-4 kali sehari, dengan 1 camilan sehat di antara waktu makan.",
     portion: "Setengah mangkok kecil (100-150 ml) per kali makan.",
@@ -73,6 +79,8 @@ const AGE_GROUPS: AgeGroup[] = [
     emoji: "👨‍👩‍👧",
     color: "bg-emerald-50 border-emerald-200",
     headerColor: "bg-gradient-to-r from-emerald-50 to-teal-50",
+    isiPiringkuImage: "/images/isi-piringku-12-23-bulan.jpg",
+    isiPiringkuAlt: "Poster Isi Piringku Bayi Balita Usia 12-23 Bulan",
     texture: "Makanan keluarga dengan potongan sedang. Anak sudah bisa makan nasi keluarga dengan lauk yang dipotong kecil-kecil.",
     frequency: "3 kali makan utama + 2 camilan sehat.",
     portion: "Mangkok kecil anak (200-250 ml) per kali makan utama.",
@@ -164,6 +172,26 @@ export function MpasiView() {
                 </div>
               </CardHeader>
               <CardContent className="pt-5">
+                {/* Poster Isi Piringku sesuai usia */}
+                {group.isiPiringkuImage && (
+                  <div className="mb-5 flex flex-col items-center bg-white rounded-2xl p-3 sm:p-4 border-2 border-green-200 shadow-sm">
+                    <h4 className="font-heading text-base font-bold text-green-800 mb-2 text-center flex items-center gap-2">
+                      <Utensils className="h-4 w-4" />
+                      Foto Isi Piringku - Usia {group.ageRange}
+                    </h4>
+                    <div className="relative w-full max-w-md aspect-[3/4] rounded-xl overflow-hidden shadow-md bg-gray-50">
+                      <img
+                        src={group.isiPiringkuImage}
+                        alt={group.isiPiringkuAlt || `Poster Isi Piringku ${group.ageRange}`}
+                        className="w-full h-full object-contain"
+                        loading="lazy"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2 text-center">
+                      Poster panduan porsi makan anak sesuai usia {group.ageRange} - sumber: Kementerian Kesehatan RI
+                    </p>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                   {/* Kiri */}
                   <div className="space-y-4">

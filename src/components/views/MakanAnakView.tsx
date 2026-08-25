@@ -33,6 +33,9 @@ interface Material {
   shortDesc: string;
   color: string;
   bgIcon: string;
+  /** Path ke Poster Isi Piringku (untuk material Isi Piringku) */
+  posterImage?: string;
+  posterAlt?: string;
   detail: {
     description: string;
     keyPoints: { title: string; desc: string }[];
@@ -49,6 +52,8 @@ const MATERIALS: Material[] = [
     shortDesc: "Panduan komposisi piring makan anak yang sehat dan bergizi seimbang.",
     color: "text-green-700",
     bgIcon: "bg-gradient-to-br from-green-100 to-emerald-100",
+    posterImage: "/images/isi-piringku-2-5-tahun.jpg",
+    posterAlt: "Poster Isi Piringku Bayi Balita Usia 2-5 Tahun",
     detail: {
       description:
         "Isi Piringku adalah panduan gizi seimbang dari Kementerian Kesehatan RI. Piring anak dibagi menjadi tiga bagian: setengah piring sayur dan buah, sepertiga piring karbohidrat, dan seperenam piring protein (prioritas protein hewani).",
@@ -409,6 +414,27 @@ export function MakanAnakView() {
 
           {selected && (
             <div className="space-y-5 mt-2">
+              {/* Poster Isi Piringku - khusus untuk material Isi Piringku */}
+              {selected.posterImage && (
+                <div className="flex flex-col items-center bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-3 sm:p-4 border-2 border-green-200">
+                  <h4 className="font-heading text-base font-bold text-green-800 mb-2 text-center flex items-center gap-2">
+                    <Utensils className="h-4 w-4" />
+                    Foto Isi Piringku - Usia 2-5 Tahun
+                  </h4>
+                  <div className="relative w-full max-w-md aspect-[3/4] rounded-xl overflow-hidden shadow-md bg-white">
+                    <img
+                      src={selected.posterImage}
+                      alt={selected.posterAlt || "Poster Isi Piringku"}
+                      className="w-full h-full object-contain"
+                      loading="lazy"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-600 mt-2 text-center">
+                    Poster panduan porsi makan anak usia 2-5 tahun - sumber: Kementerian Kesehatan RI
+                  </p>
+                </div>
+              )}
+
               <div>
                 <h4 className="text-sm font-semibold text-gray-900 mb-2">Poin Penting</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

@@ -7,7 +7,6 @@ import {
   Ruler,
   Weight,
   CalendarDays,
-  Save,
   Printer,
   PhoneCall,
   RotateCcw,
@@ -27,6 +26,13 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   calculateNutritionStatus,
@@ -38,7 +44,7 @@ import {
   type CalcResult,
 } from "@/lib/who/calculator";
 import { GrowthChart } from "@/components/gemas/GrowthChart";
-import { useGemasStore, type MeasurementRecord } from "@/lib/gemas/store";
+import { useGemasStore } from "@/lib/gemas/store";
 import { cn } from "@/lib/utils";
 
 const STATUS_BADGE: Record<string, { color: string; bg: string }> = {
@@ -203,7 +209,7 @@ function getRecommendations(result: CalcResult): { title: string; items: string[
 
 export function CekStatusGiziView() {
   const { toast } = useToast();
-  const { setView, addMeasurement } = useGemasStore();
+  const { setView } = useGemasStore();
   const [form, setForm] = useState({
     nama: "",
     jenisKelamin: "" as "L" | "P" | "",
@@ -344,38 +350,356 @@ export function CekStatusGiziView() {
     });
   };
 
-  const handleSave = () => {
-    if (!result) return;
-    const record: MeasurementRecord = {
-      id: `m-${Date.now()}`,
-      nama: result.input.nama,
-      jenisKelamin: result.input.jenisKelamin,
-      tanggalLahir: result.input.tanggalLahir,
-      tanggalUkur: result.input.tanggalUkur,
-      beratBadan: result.input.beratBadan,
-      panjangTinggiBadan: result.input.panjangTinggiBadan,
-      jenisPengukuran: result.input.jenisPengukuran,
-      ageLabel: formatAge(result.age),
-      bmi: result.bmi,
-      results: result.results.map((r) => ({
-        indicator: r.indicator,
-        zScore: r.zScore,
-        status: r.status,
-        statusKey: r.statusKey,
-      })),
-      overallStatus: result.overallStatus,
-      overallStatusKey: result.overallStatusKey,
-      createdAt: new Date().toISOString(),
-    };
-    addMeasurement(record);
-    toast({
-      title: "Hasil tersimpan",
-      description: "Hasil pengukuran disimpan di riwayat (perangkat ini).",
-    });
+  /**
+   * CETAK HASIL dengan format A4
+   * Mendukung 3 format output: PDF, JPG, dan Word (HTML download)
+   * Sebelum simpan, tampilkan preview terlebih dahulu.
+   */
+
+  // State untuk modal preview cetak
+  const [printPreview, setPrintPreview] = useState<{
+    open: boolean;
+    format: "pdf" | "jpg" | "word" | null;
+  }>({ open: false, format: null });
+
+  // Buka dialog pilihan format cetak
+  const handlePrint = () => {
+    setPrintPreview({ open: true, format: null });
   };
 
-  const handlePrint = () => {
-    window.print();
+  // Pilih format tertentu
+  const handleSelectFormat = (format: "pdf" | "jpg" | "word") => {
+    setPrintPreview({ open: true, format });
+  };
+
+  // Generate HTML untuk hasil cetak A4
+  const generatePrintHTML = (): string => {
+    if (!result) return "";
+
+    const formatDate = (dateStr: string) =>
+      new Date(dateStr).toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
+
+    const indicatorRows = result.results
+      .map(
+        (r) => `
+        <tr>
+          <td style="padding: 8px; border: 1px solid #ccc;">
+            <strong>${r.indicator}</strong><br/>
+            <span style="font-size: 10px; color: #666;">${r.reference}</span>
+          </td>
+          <td style="padding: 8px; border: 1px solid #ccc; text-align: center; font-family: monospace; font-weight: bold;">
+            ${r.zScore !== null ? `${r.zScore >= 0 ? "+" : ""}${r.zScore.toFixed(2)} SD` : "—"}
+          </td>
+          <td style="padding: 8px; border: 1px solid #ccc; text-align: center;">${r.status}</td>
+        </tr>`
+      )
+      .join("");
+
+    const recommendationsHtml = recommendations
+      .map(
+        (rec) => `
+        <div style="margin-bottom: 12px; padding: 10px; background: ${
+          rec.tone === "danger" ? "#fef2f2" : rec.tone === "warning" ? "#fff7ed" : "#f0fdf4"
+        }; border-left: 4px solid ${rec.tone === "danger" ? "#dc2626" : rec.tone === "warning" ? "#f97316" : "#16a34a"};">
+          <strong style="font-size: 12px; color: ${rec.tone === "danger" ? "#991b1b" : rec.tone === "warning" ? "#9a3412" : "#166534"};">${rec.title}</strong>
+          <ul style="margin: 6px 0 0 16px; padding: 0; font-size: 11px;">
+            ${rec.items.map((item) => `<li style="margin-bottom: 3px;">${item}</li>`).join("")}
+          </ul>
+        </div>`
+      )
+      .join("");
+
+    return `
+    <!DOCTYPE html>
+    <html lang="id">
+    <head>
+      <meta charset="UTF-8">
+      <title>Hasil Cek Status Gizi - ${result.input.nama}</title>
+      <style>
+        @page {
+          size: A4;
+          margin: 1.5cm;
+        }
+        body {
+          font-family: 'Nunito', 'Arial', sans-serif;
+          color: #333;
+          line-height: 1.5;
+          font-size: 12px;
+        }
+        .header {
+          text-align: center;
+          border-bottom: 3px solid #16a34a;
+          padding-bottom: 12px;
+          margin-bottom: 16px;
+        }
+        .header h1 {
+          color: #166534;
+          font-size: 20px;
+          margin: 0 0 4px 0;
+        }
+        .header p {
+          font-size: 11px;
+          color: #666;
+          margin: 2px 0;
+        }
+        .header .puskesmas {
+          font-weight: bold;
+          color: #166534;
+          font-size: 12px;
+        }
+        h2 {
+          color: #166534;
+          font-size: 14px;
+          border-bottom: 2px solid #d1fae5;
+          padding-bottom: 4px;
+          margin-top: 18px;
+          margin-bottom: 10px;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 8px 0;
+          font-size: 11px;
+        }
+        th {
+          background: #f0fdf4;
+          padding: 8px;
+          border: 1px solid #ccc;
+          text-align: left;
+          font-weight: bold;
+          color: #166534;
+        }
+        .data-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+          margin: 10px 0;
+        }
+        .data-item {
+          padding: 6px 8px;
+          background: #f9fafb;
+          border-radius: 4px;
+          font-size: 11px;
+        }
+        .data-item .label {
+          color: #666;
+          font-size: 10px;
+          display: block;
+        }
+        .data-item .value {
+          font-weight: bold;
+          color: #111;
+        }
+        .status-box {
+          padding: 10px;
+          border-radius: 6px;
+          margin: 10px 0;
+          font-size: 11px;
+        }
+        .disclaimer {
+          background: #fffbeb;
+          border: 1px solid #fde68a;
+          padding: 8px;
+          border-radius: 4px;
+          font-size: 10px;
+          color: #92400e;
+          margin-top: 16px;
+        }
+        .footer {
+          margin-top: 20px;
+          padding-top: 10px;
+          border-top: 1px solid #ccc;
+          text-align: center;
+          font-size: 10px;
+          color: #666;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>Hasil Cek Status Gizi Anak</h1>
+        <p class="puskesmas">GEMAS - UPTD Puskesmas Neglasari Kota Bandung</p>
+        <p>Gerakan Edukasi Makanan Anak Sehat</p>
+      </div>
+
+      <h2>1. Data Anak</h2>
+      <div class="data-grid">
+        <div class="data-item"><span class="label">Nama</span><span class="value">${result.input.nama}</span></div>
+        <div class="data-item"><span class="label">Usia</span><span class="value">${formatAge(result.age)}</span></div>
+        <div class="data-item"><span class="label">Jenis Kelamin</span><span class="value">${result.input.jenisKelamin === "L" ? "Laki-laki" : "Perempuan"}</span></div>
+        <div class="data-item"><span class="label">Tanggal Pengukuran</span><span class="value">${formatDate(result.input.tanggalUkur)}</span></div>
+        <div class="data-item"><span class="label">Berat Badan</span><span class="value">${result.input.beratBadan.toFixed(1)} kg</span></div>
+        <div class="data-item"><span class="label">${result.age.totalMonths < 24 ? "Panjang Badan" : "Tinggi Badan"}</span><span class="value">${result.input.panjangTinggiBadan.toFixed(1)} cm</span></div>
+        <div class="data-item"><span class="label">IMT</span><span class="value">${result.bmi.toFixed(2)} kg/m²</span></div>
+        <div class="data-item"><span class="label">Jenis Pengukuran</span><span class="value">${result.input.jenisPengukuran === "panjang" ? "Panjang (telentang)" : "Tinggi (berdiri)"}</span></div>
+      </div>
+
+      <h2>2. Hasil Z-score</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 40%;">Indikator</th>
+            <th style="width: 30%; text-align: center;">Z-score</th>
+            <th style="width: 30%; text-align: center;">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${indicatorRows}
+        </tbody>
+      </table>
+
+      <h2>3. Status Gizi Keseluruhan</h2>
+      <div class="status-box" style="background: ${
+        result.overallStatusKey === "normal" ? "#f0fdf4" :
+        result.overallStatusKey === "perlu-perhatian" ? "#fff7ed" :
+        result.overallStatusKey === "perlu-konsultasi" ? "#fef2f2" : "#f9fafb"
+      }; border-left: 4px solid ${result.overallStatusKey === "normal" ? "#16a34a" :
+        result.overallStatusKey === "perlu-perhatian" ? "#f97316" :
+        result.overallStatusKey === "perlu-konsultasi" ? "#dc2626" : "#9ca3af"};">
+        ${result.overallStatus}
+      </div>
+
+      <h2>4. Apa yang Sebaiknya Dilakukan Orang Tua?</h2>
+      ${recommendationsHtml}
+
+      <h2>5. Informasi Algoritma</h2>
+      <div class="data-grid">
+        <div class="data-item"><span class="label">Reference</span><span class="value">${result.reference}</span></div>
+        <div class="data-item"><span class="label">Algoritma</span><span class="value">LMS Method (WHO)</span></div>
+      </div>
+
+      <div class="disclaimer">
+        <strong>Disclaimer:</strong> Hasil perhitungan menggunakan standar pertumbuhan WHO dan ditujukan sebagai alat skrining/pemantauan pertumbuhan, bukan diagnosis medis. Apabila ditemukan hasil yang perlu diperhatikan, orang tua dianjurkan berkonsultasi dengan tenaga kesehatan atau ahli gizi.
+      </div>
+
+      <div class="footer">
+        <p>Dicetak dari GEMAS pada ${new Date().toLocaleString("id-ID")}</p>
+        <p>© 2026 GEMAS - UPTD Puskesmas Neglasari Kota Bandung</p>
+      </div>
+    </body>
+    </html>
+    `;
+  };
+
+  // Eksekusi cetak/save sesuai format yang dipilih
+  const handleExecutePrint = () => {
+    if (!result || !printPreview.format) return;
+
+    const html = generatePrintHTML();
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const safeName = result.input.nama.replace(/[^a-zA-Z0-9]/g, "_");
+
+    if (printPreview.format === "pdf") {
+      // Untuk PDF: buka window baru dan trigger print ke PDF (browser print dialog)
+      const printWindow = window.open(url, "_blank");
+      if (printWindow) {
+        printWindow.onload = () => {
+          setTimeout(() => {
+            printWindow.print();
+            URL.revokeObjectURL(url);
+          }, 500);
+        };
+      }
+      toast({
+        title: "Membuka dialog cetak PDF",
+        description: "Pilih 'Save as PDF' di dialog cetak browser untuk menyimpan.",
+      });
+    } else if (printPreview.format === "word") {
+      // Untuk Word: download sebagai .doc (HTML yang dapat dibuka Word)
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Hasil_Gizi_${safeName}_${new Date().toISOString().split("T")[0]}.doc`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({
+        title: "File Word diunduh",
+        description: "File .doc berhasil diunduh dan dapat dibuka dengan Microsoft Word.",
+      });
+    } else if (printPreview.format === "jpg") {
+      // Untuk JPG: konversi HTML ke gambar menggunakan canvas
+      const printWindow = window.open(url, "_blank");
+      if (printWindow) {
+        printWindow.onload = async () => {
+          try {
+            // Tunggu render selesai
+            await new Promise((resolve) => setTimeout(resolve, 800));
+
+            // Buat SVG foreignObject untuk render HTML ke gambar
+            const width = 794; // A4 width at 96 DPI
+            const height = printWindow.document.body.scrollHeight;
+            const serializer = new XMLSerializer();
+            const docHtml = serializer.serializeToString(printWindow.document.body);
+
+            const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+              <foreignObject width="100%" height="100%">
+                <div xmlns="http://www.w3.org/1999/xhtml">${docHtml}</div>
+              </foreignObject>
+            </svg>`;
+
+            const svg = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+            const svgUrl = URL.createObjectURL(svg);
+
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => {
+              const canvas = document.createElement("canvas");
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext("2d");
+              if (ctx) {
+                ctx.fillStyle = "white";
+                ctx.fillRect(0, 0, width, height);
+                ctx.drawImage(img, 0, 0);
+                canvas.toBlob((blob) => {
+                  if (blob) {
+                    const jpgUrl = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = jpgUrl;
+                    a.download = `Hasil_Gizi_${safeName}_${new Date().toISOString().split("T")[0]}.jpg`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(jpgUrl);
+                    toast({
+                      title: "Gambar JPG diunduh",
+                      description: "Hasil dalam format JPG berhasil disimpan.",
+                    });
+                  }
+                }, "image/jpeg", 0.95);
+              }
+              URL.revokeObjectURL(svgUrl);
+              printWindow.close();
+            };
+            img.onerror = () => {
+              // Fallback: jika SVG foreignObject tidak didukung, gunakan screenshot window
+              toast({
+                title: "Gagal membuat JPG otomatis",
+                description: "Browser tidak mendukung konversi langsung. Silakan gunakan fitur Print Screen atau pilih format PDF.",
+                variant: "destructive",
+              });
+              printWindow.close();
+            };
+            img.src = svgUrl;
+          } catch (e) {
+            toast({
+              title: "Error membuat JPG",
+              description: "Terjadi kesalahan. Silakan coba format PDF atau Word.",
+              variant: "destructive",
+            });
+            printWindow.close();
+          }
+        };
+      }
+    }
+
+    setPrintPreview({ open: false, format: null });
   };
 
   // Persiapkan data grafik
@@ -396,83 +720,95 @@ export function CekStatusGiziView() {
       unit?: string;
     }[] = [];
 
-    // BB/U (only for <= 60 months)
+    // BB/U (only for <= 60 months) - hanya jika data tersedia & tidak out-of-range
     if (ageMonths <= 60) {
       const r = result.results.find((res) => res.indicator === "BB/U");
-      charts.push({
-        title: "Grafik Berat Badan menurut Umur (BB/U)",
-        indicatorLabel: "Weight-for-age WHO Child Growth Standards",
-        data: getGrowthCurveData("BB/U", result.input.jenisKelamin, ageMonths),
-        xKey: "month",
-        xLabel: "Umur (bulan)",
-        yLabel: "Berat Badan (kg)",
-        measurementValue: r?.zScore !== null && r?.isOutOfRange === false ? result.input.beratBadan : result.input.beratBadan,
-        measurementX: ageMonths,
-        statusLabel: r?.status,
-        statusKey: r?.statusKey,
-        unit: "kg",
-      });
-    }
-
-    // TB/U (or PB/U for <24m)
-    const tbResult = result.results.find((res) => res.indicator === "TB/U");
-    if (tbResult) {
-      charts.push({
-        title: ageMonths < 24 ? "Grafik Panjang Badan menurut Umur (PB/U)" : "Grafik Tinggi Badan menurut Umur (TB/U)",
-        indicatorLabel: "Length/Height-for-age WHO Standards",
-        data: getGrowthCurveData("TB/U", result.input.jenisKelamin, ageMonths),
-        xKey: "month",
-        xLabel: "Umur (bulan)",
-        yLabel: ageMonths < 24 ? "Panjang Badan (cm)" : "Tinggi Badan (cm)",
-        measurementValue: result.input.panjangTinggiBadan,
-        measurementX: ageMonths,
-        statusLabel: tbResult.status,
-        statusKey: tbResult.statusKey,
-        unit: "cm",
-      });
-    }
-
-    // BB/TB or BB/PB (for <=60m only)
-    if (ageMonths <= 60) {
-      const wfhResult = result.results.find((res) => res.indicator === "BB/TB");
-      const wfhData = getWfhCurveData(
-        result.input.jenisKelamin,
-        ageMonths,
-        result.input.panjangTinggiBadan
-      );
-      if (wfhData.length > 0) {
+      const chartData = getGrowthCurveData("BB/U", result.input.jenisKelamin, ageMonths);
+      // Hanya tampilkan grafik jika data tersedia dan indikator tidak out-of-range
+      if (chartData.length > 0 && r && !r.isOutOfRange && r.zScore !== null) {
         charts.push({
-          title: ageMonths < 24 ? "Grafik Berat Badan menurut Panjang Badan (BB/PB)" : "Grafik Berat Badan menurut Tinggi Badan (BB/TB)",
-          indicatorLabel: "Weight-for-length/height WHO Standards",
-          data: wfhData,
-          xKey: "cm",
-          xLabel: ageMonths < 24 ? "Panjang Badan (cm)" : "Tinggi Badan (cm)",
+          title: "Grafik Berat Badan menurut Umur (BB/U)",
+          indicatorLabel: "Weight-for-age WHO Child Growth Standards",
+          data: chartData,
+          xKey: "month",
+          xLabel: "Umur (bulan)",
           yLabel: "Berat Badan (kg)",
           measurementValue: result.input.beratBadan,
-          measurementX: result.input.panjangTinggiBadan,
-          statusLabel: wfhResult?.status,
-          statusKey: wfhResult?.statusKey,
+          measurementX: ageMonths,
+          statusLabel: r.status,
+          statusKey: r.statusKey,
           unit: "kg",
         });
       }
     }
 
-    // IMT/U
+    // TB/U (or PB/U for <24m) - hanya jika data tersedia & tidak out-of-range
+    const tbResult = result.results.find((res) => res.indicator === "TB/U");
+    if (tbResult && !tbResult.isOutOfRange && tbResult.zScore !== null) {
+      const chartData = getGrowthCurveData("TB/U", result.input.jenisKelamin, ageMonths);
+      if (chartData.length > 0) {
+        charts.push({
+          title: ageMonths < 24 ? "Grafik Panjang Badan menurut Umur (PB/U)" : "Grafik Tinggi Badan menurut Umur (TB/U)",
+          indicatorLabel: "Length/Height-for-age WHO Standards",
+          data: chartData,
+          xKey: "month",
+          xLabel: "Umur (bulan)",
+          yLabel: ageMonths < 24 ? "Panjang Badan (cm)" : "Tinggi Badan (cm)",
+          measurementValue: result.input.panjangTinggiBadan,
+          measurementX: ageMonths,
+          statusLabel: tbResult.status,
+          statusKey: tbResult.statusKey,
+          unit: "cm",
+        });
+      }
+    }
+
+    // BB/TB or BB/PB (for <=60m only) - hanya jika data tersedia & tidak out-of-range
+    if (ageMonths <= 60) {
+      const wfhResult = result.results.find((res) => res.indicator === "BB/TB");
+      if (wfhResult && !wfhResult.isOutOfRange && wfhResult.zScore !== null) {
+        const wfhData = getWfhCurveData(
+          result.input.jenisKelamin,
+          ageMonths,
+          result.input.panjangTinggiBadan
+        );
+        if (wfhData.length > 0) {
+          charts.push({
+            title: ageMonths < 24 ? "Grafik Berat Badan menurut Panjang Badan (BB/PB)" : "Grafik Berat Badan menurut Tinggi Badan (BB/TB)",
+            indicatorLabel: "Weight-for-length/height WHO Standards",
+            data: wfhData,
+            xKey: "cm",
+            xLabel: ageMonths < 24 ? "Panjang Badan (cm)" : "Tinggi Badan (cm)",
+            yLabel: "Berat Badan (kg)",
+            measurementValue: result.input.beratBadan,
+            measurementX: result.input.panjangTinggiBadan,
+            statusLabel: wfhResult.status,
+            statusKey: wfhResult.statusKey,
+            unit: "kg",
+          });
+        }
+      }
+    }
+
+    // IMT/U - hanya jika data tersedia & tidak out-of-range
     const bfaResult = result.results.find((res) => res.indicator === "IMT/U");
-    if (bfaResult) {
-      charts.push({
-        title: "Grafik Indeks Massa Tubuh menurut Umur (IMT/U)",
-        indicatorLabel: ageMonths <= 60 ? "BMI-for-age WHO Child Growth Standards" : "BMI-for-age WHO Reference 2007",
-        data: getGrowthCurveData("IMT/U", result.input.jenisKelamin, ageMonths),
-        xKey: "month",
-        xLabel: "Umur (bulan)",
-        yLabel: "IMT (kg/m²)",
-        measurementValue: result.bmi,
-        measurementX: ageMonths,
-        statusLabel: bfaResult.status,
-        statusKey: bfaResult.statusKey,
-        unit: "kg/m²",
-      });
+    if (bfaResult && !bfaResult.isOutOfRange && bfaResult.zScore !== null) {
+      const chartData = getGrowthCurveData("IMT/U", result.input.jenisKelamin, ageMonths);
+      if (chartData.length > 0) {
+        charts.push({
+          title: "Grafik Indeks Massa Tubuh menurut Umur (IMT/U)",
+          indicatorLabel: ageMonths <= 60 ? "BMI-for-age WHO Child Growth Standards" : "BMI-for-age WHO Reference 2007",
+          data: chartData,
+          xKey: "month",
+          xLabel: "Umur (bulan)",
+          yLabel: "IMT (kg/m²)",
+          measurementValue: result.bmi,
+          measurementX: ageMonths,
+          statusLabel: bfaResult.status,
+          statusKey: bfaResult.statusKey,
+          unit: "kg/m²",
+        });
+      }
     }
 
     return charts;
@@ -834,18 +1170,32 @@ export function CekStatusGiziView() {
               </CardContent>
             </Card>
 
-            {/* 4. Grafik Pertumbuhan */}
+            {/* 4. Grafik Pertumbuhan - hanya tampilkan yang datanya tersedia */}
             <div>
               <h3 className="font-heading text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
                 <span className="h-6 w-6 rounded-full bg-green-600 text-white text-xs flex items-center justify-center font-bold">4</span>
                 Grafik Pertumbuhan
                 <Activity className="h-4 w-4 text-green-600" />
               </h3>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {charts.map((c, i) => (
-                  <GrowthChart key={i} {...c} />
-                ))}
-              </div>
+              {charts.length > 0 ? (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {charts.map((c, i) => (
+                    <GrowthChart key={i} {...c} />
+                  ))}
+                </div>
+              ) : (
+                <Card className="border-2 border-amber-200 bg-amber-50/50 rounded-2xl">
+                  <CardContent className="pt-5 pb-5 text-center">
+                    <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto mb-2" />
+                    <p className="text-sm text-amber-800 font-medium mb-1">
+                      Grafik pertumbuhan tidak tersedia untuk data ini
+                    </p>
+                    <p className="text-xs text-amber-700 max-w-md mx-auto">
+                      Data antropometri berada di luar rentang valid WHO atau terdapat kemungkinan kesalahan pengukuran, sehingga grafik tidak dapat ditampilkan. Silakan periksa kembali data pengukuran atau konsultasikan dengan tenaga kesehatan.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
             {/* 5. Apa Artinya? */}
@@ -958,7 +1308,7 @@ export function CekStatusGiziView() {
               </CardContent>
             </Card>
 
-            {/* Action buttons */}
+            {/* Action buttons - Hapus "Simpan Hasil", ganti "Cetak Hasil" dengan fitur PDF/JPG/Word + preview */}
             <div className="flex flex-col sm:flex-row gap-3 pt-2 no-print">
               <Button
                 onClick={handleRevalidate}
@@ -969,19 +1319,11 @@ export function CekStatusGiziView() {
                 Cek Ulang Hasil
               </Button>
               <Button
-                onClick={handleSave}
-                className="bg-green-600 hover:bg-green-700 text-white rounded-full flex-1"
-              >
-                <Save className="h-4 w-4 mr-2" />
-                Simpan Hasil
-              </Button>
-              <Button
                 onClick={handlePrint}
-                variant="outline"
-                className="rounded-full flex-1 border-green-300 text-green-700 hover:bg-green-50"
+                className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-full flex-1 shadow-md"
               >
                 <Printer className="h-4 w-4 mr-2" />
-                Cetak Hasil
+                Cetak Hasil (PDF/JPG/Word)
               </Button>
               <Button
                 onClick={() => setView("hubungi-ahli")}
@@ -1079,6 +1421,130 @@ export function CekStatusGiziView() {
             </Card>
           </div>
         )}
+
+        {/* Dialog Print Preview - pilih format PDF/JPG/Word dengan preview A4 */}
+        <Dialog open={printPreview.open} onOpenChange={(open) => setPrintPreview({ open, format: null })}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-lg flex items-center gap-2">
+                <Printer className="h-5 w-5 text-green-600" />
+                Cetak Hasil Status Gizi
+              </DialogTitle>
+              <DialogDescription className="text-sm">
+                Pilih format file untuk menyimpan hasil cetak. Hasil akan disimpan dalam ukuran A4.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 mt-3">
+              {/* Pilihan format */}
+              <div>
+                <h4 className="text-sm font-semibold text-gray-900 mb-2">Pilih Format File:</h4>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPrintPreview({ open: true, format: "pdf" })}
+                    className={cn(
+                      "p-3 rounded-xl border-2 transition-all text-center",
+                      printPreview.format === "pdf"
+                        ? "border-red-500 bg-red-50 shadow-md"
+                        : "border-gray-200 hover:border-red-300 hover:bg-red-50/50"
+                    )}
+                  >
+                    <div className="text-2xl mb-1">📄</div>
+                    <div className="text-xs font-bold text-gray-900">PDF</div>
+                    <div className="text-[10px] text-gray-500">Save as PDF</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintPreview({ open: true, format: "jpg" })}
+                    className={cn(
+                      "p-3 rounded-xl border-2 transition-all text-center",
+                      printPreview.format === "jpg"
+                        ? "border-blue-500 bg-blue-50 shadow-md"
+                        : "border-gray-200 hover:border-blue-300 hover:bg-blue-50/50"
+                    )}
+                  >
+                    <div className="text-2xl mb-1">🖼️</div>
+                    <div className="text-xs font-bold text-gray-900">JPG</div>
+                    <div className="text-[10px] text-gray-500">Gambar JPG</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintPreview({ open: true, format: "word" })}
+                    className={cn(
+                      "p-3 rounded-xl border-2 transition-all text-center",
+                      printPreview.format === "word"
+                        ? "border-indigo-500 bg-indigo-50 shadow-md"
+                        : "border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50"
+                    )}
+                  >
+                    <div className="text-2xl mb-1">📝</div>
+                    <div className="text-xs font-bold text-gray-900">Word</div>
+                    <div className="text-[10px] text-gray-500">.doc file</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Preview hasil cetak A4 */}
+              {result && (
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1.5">
+                    <Info className="h-4 w-4 text-blue-500" />
+                    Preview Hasil Cetak (Ukuran A4):
+                  </h4>
+                  <div className="bg-gray-100 p-3 rounded-xl border border-gray-200 max-h-[400px] overflow-y-auto">
+                    <div
+                      className="bg-white shadow-md mx-auto p-6"
+                      style={{ width: "100%", maxWidth: "794px", aspectRatio: "auto" }}
+                      dangerouslySetInnerHTML={{ __html: generatePrintHTML().split("<body>")[1]?.split("</body>")[0] || "" }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Info A4 */}
+              <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-3 flex items-start gap-2">
+                <Info className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                <div className="text-xs text-blue-800">
+                  <strong>Format A4 (210 × 297 mm).</strong> Hasil cetak akan disesuaikan dengan ukuran kertas A4 standar.
+                  {printPreview.format === "pdf" && " Untuk PDF, pilih 'Save as PDF' di dialog cetak browser."}
+                  {printPreview.format === "jpg" && " Untuk JPG, hasil akan dikonversi menjadi gambar."}
+                  {printPreview.format === "word" && " Untuk Word, file .doc dapat dibuka dengan Microsoft Word atau aplikasi sejenis."}
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-2 justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => setPrintPreview({ open: false, format: null })}
+                  className="rounded-full"
+                >
+                  Batal
+                </Button>
+                <Button
+                  onClick={handleExecutePrint}
+                  disabled={!printPreview.format}
+                  className={cn(
+                    "rounded-full text-white",
+                    printPreview.format === "pdf"
+                      ? "bg-red-600 hover:bg-red-700"
+                      : printPreview.format === "jpg"
+                      ? "bg-blue-600 hover:bg-blue-700"
+                      : printPreview.format === "word"
+                      ? "bg-indigo-600 hover:bg-indigo-700"
+                      : "bg-gray-400"
+                  )}
+                >
+                  <Printer className="h-4 w-4 mr-2" />
+                  {printPreview.format
+                    ? `Simpan sebagai ${printPreview.format.toUpperCase()}`
+                    : "Pilih format dulu"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

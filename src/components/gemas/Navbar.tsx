@@ -11,7 +11,7 @@ const NAV_ITEMS: { key: ViewKey; label: string }[] = [
   { key: "cek-status-gizi", label: "Cek Status Gizi" },
   { key: "mp-asi", label: "MP-ASI" },
   { key: "makan-anak", label: "Makan Anak" },
-  { key: "video-edukasi", label: "Video Edukasi" },
+  { key: "video-edukasi", label: "Video dan Media Edukasi" },
   { key: "hubungi-ahli", label: "Hubungi Ahli Gizi" },
   { key: "tentang", label: "Tentang GEMAS" },
 ];
