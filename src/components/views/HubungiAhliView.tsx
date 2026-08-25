@@ -132,7 +132,13 @@ export function HubungiAhliView() {
                 <Clock className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
                 <div>
                   <div className="text-xs text-gray-500">Jam Layanan</div>
-                  <div className="text-sm text-gray-900">{PUSKESMAS.jamLayanan}</div>
+                  <div className="text-sm text-gray-900 space-y-0.5">
+                    {PUSKESMAS.jamLayananLines.map((line, i) => (
+                      <div key={i} className="text-left">
+                        {line.hari}, {line.jam}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
               {PUSKESMAS.telepon && (

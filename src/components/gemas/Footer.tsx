@@ -86,9 +86,14 @@ export function Footer() {
                 </li>
               )}
             </ul>
-            <p className="text-xs text-gray-500 mt-3">
-              {PUSKESMAS.jamLayanan}
-            </p>
+            <div className="text-xs text-gray-500 mt-3">
+              <div className="font-semibold text-gray-700 mb-0.5">Jam Layanan:</div>
+              {PUSKESMAS.jamLayananLines.map((line, i) => (
+                <div key={i} className="text-left">
+                  {line.hari}, {line.jam}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 

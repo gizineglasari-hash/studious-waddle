@@ -26,7 +26,10 @@ export interface PuskesmasInfo {
   website: string;
   instagram: string;
   facebook: string;
+  /** Jam layanan (string pendek untuk tampilan ringkas) */
   jamLayanan: string;
+  /** Jam layanan dalam bentuk array agar tampil dalam beberapa baris rata kiri */
+  jamLayananLines: { hari: string; jam: string }[];
   logo: string; // placeholder - admin ganti dengan URL logo Puskesmas
 }
 
@@ -43,13 +46,18 @@ export const NUTRITIONIST: NutritionistInfo = {
 
 export const PUSKESMAS: PuskesmasInfo = {
   nama: "UPTD Puskesmas Neglasari",
-  alamat: "Kota Bandung, Jawa Barat", // PLACEHOLDER - lengkapi alamat lengkap
+  alamat:
+    "Jl. Cikutra No.276 C, Neglasari, Kec. Cibeunying Kaler, Kota Bandung, Jawa Barat 40124, Indonesia",
   telepon: "", // PLACEHOLDER
   email: "", // PLACEHOLDER
   website: "", // PLACEHOLDER
   instagram: "", // PLACEHOLDER - isi @username
   facebook: "", // PLACEHOLDER - isi URL halaman Facebook
   jamLayanan: "Senin - Jumat, 08.00 - 14.00 WIB | Sabtu, 08.00 - 11.00 WIB",
+  jamLayananLines: [
+    { hari: "Senin - Jumat", jam: "08.00 - 14.00 WIB" },
+    { hari: "Sabtu", jam: "08.00 - 11.00 WIB" },
+  ],
   logo: "", // PLACEHOLDER - ganti dengan URL logo Puskesmas
 };
 

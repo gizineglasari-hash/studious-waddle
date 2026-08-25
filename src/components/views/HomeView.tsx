@@ -77,13 +77,6 @@ const FEATURES: FeatureCard[] = [
   },
 ];
 
-const STATS = [
-  { value: "4", label: "Indikator WHO", icon: Activity },
-  { value: "60+", label: "Bahan Makanan", icon: Utensils },
-  { value: "12+", label: "Video Edukasi", icon: PlayCircle },
-  { value: "100%", label: "Standar WHO", icon: ShieldCheck },
-];
-
 export function HomeView() {
   const { setView } = useGemasStore();
 
@@ -200,19 +193,7 @@ export function HomeView() {
             </div>
           </div>
 
-          {/* Stats bar */}
-          <div className="mt-12 grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {STATS.map((stat) => (
-              <div
-                key={stat.label}
-                className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 text-center shadow-sm border border-green-100 hover:shadow-md transition-shadow"
-              >
-                <stat.icon className="h-5 w-5 text-green-600 mx-auto mb-1" />
-                <div className="text-2xl font-extrabold text-green-700">{stat.value}</div>
-                <div className="text-xs text-gray-600 font-medium">{stat.label}</div>
-              </div>
-            ))}
-          </div>
+          {/* Stats bar dihilangkan sesuai permintaan */}
         </div>
       </section>
 

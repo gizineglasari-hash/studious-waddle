@@ -15,7 +15,7 @@ interface AgeGroup {
   texture: string;
   frequency: string;
   portion: string;
-  sampleMenu: { time: string; menu: string }[];
+  sampleMenu: { time?: string; menu: string }[];
   proteinHewani: string;
   tips: string[];
 }
@@ -33,9 +33,9 @@ const AGE_GROUPS: AgeGroup[] = [
     frequency: "Mulai 1-2 kali sehari, dengan porsi kecil (2-3 sendok makan).",
     portion: "2-3 sendok makan per kali makan, lalu tingkatkan bertahap sesuai nafsu makan anak.",
     sampleMenu: [
-      { time: "Pagi", menu: "Bubur tepung beras dengan daging ayam halus" },
-      { time: "Siang", menu: "Puree pisang atau alpukat" },
-      { time: "Sore", menu: "Bubur kentang dengan hati ayam halus" },
+      { menu: "Bubur sup ayam kacang merah" },
+      { menu: "Bubur kentang hati ayam wortel" },
+      { menu: "Bubur kari ayam dan bayam" },
     ],
     proteinHewani: "Wajib ditambahkan: 1 sendok teh daging/ikan/hati ayam yang dihaluskan setiap kali makan.",
     tips: [
@@ -62,7 +62,7 @@ const AGE_GROUPS: AgeGroup[] = [
       { time: "Camilan Pagi", menu: "Pisang lumat atau puree buah" },
       { time: "Makan Siang", menu: "Nasi tim dengan hati ayam, brokoli, dan tomat" },
       { time: "Camilan Sore", menu: "Biskuit bayi atau alpukat lumat" },
-      { time: "Makan Malam", menu: "Bubur kacang hijau dengan susu" },
+      { time: "Makan Malam", menu: "Nasi tim dengan hati ayam, brokoli, dan tomat" },
     ],
     proteinHewani: "1 butir telur atau 30-40 gram daging/ikan/hati per hari.",
     tips: [
@@ -232,9 +232,11 @@ export function MpasiView() {
                       <div className="space-y-2">
                         {group.sampleMenu.map((m, i) => (
                           <div key={i} className="flex items-start gap-2 p-2.5 rounded-lg bg-gray-50">
-                            <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 flex-shrink-0">
-                              {m.time}
-                            </Badge>
+                            {m.time && (
+                              <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 flex-shrink-0">
+                                {m.time}
+                              </Badge>
+                            )}
                             <span className="text-sm text-gray-700">{m.menu}</span>
                           </div>
                         ))}
