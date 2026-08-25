@@ -145,7 +145,7 @@ export function HomeView() {
                 <div className="absolute inset-0 rounded-full bg-gradient-to-br from-green-100 via-emerald-50 to-amber-50" />
                 <div className="absolute inset-4 rounded-full bg-white/80 backdrop-blur-sm shadow-inner overflow-hidden">
                   <img
-                    src="/images/foto-beranda.png"
+                    src="/images/foto-beranda-baru.png"
                     alt="Foto Beranda - Gerakan Edukasi Makanan Anak Sehat"
                     title="Foto Beranda"
                     className="absolute inset-0 w-full h-full object-cover"
