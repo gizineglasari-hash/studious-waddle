@@ -91,7 +91,7 @@ const AGE_GROUPS: AgeGroup[] = [
       { time: "Camilan Sore", menu: "Bubur kacang hijau atau roti gandum" },
       { time: "Makan Malam", menu: "Nasi, ayam goreng/kukus, sayur asem, buah" },
     ],
-    proteinHewani: "1 telur + 40-50 gram daging/ikan/hati + susu 2 gelas per hari.",
+    // proteinHewani dihilangkan untuk usia 12-23 bulan sesuai permintaan
     tips: [
       "Makan bersama keluarga untuk menumbuhkan kebiasaan makan sehat.",
       "Variasi menu harian dengan 4 bintang: karbohidrat, protein hewani, sayur, buah.",
