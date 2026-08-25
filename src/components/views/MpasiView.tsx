@@ -94,7 +94,7 @@ const AGE_GROUPS: AgeGroup[] = [
     // proteinHewani dihilangkan untuk usia 12-23 bulan sesuai permintaan
     tips: [
       "Makan bersama keluarga untuk menumbuhkan kebiasaan makan sehat.",
-      "Variasi menu harian dengan 4 bintang: karbohidrat, protein hewani, sayur, buah.",
+      "Variasi menu harian lengkap: sumber karbohidrat (nasi/ kentang/ mie/ singkong), protein hewani (ayam/ ikan/ telur/ daging), protein nabati (tahu / tempe/ kacang merah), sayuran dan buah-buahan.",
       "Hindari jajan tinggi gula/garam, minuman manis, dan gorengan berlebih.",
       "Libatkan anak dalam persiapan makanan sederhana (mencuci sayur, memilih buah).",
       "ASI tetap dapat diberikan hingga 24 bulan atau lebih.",
