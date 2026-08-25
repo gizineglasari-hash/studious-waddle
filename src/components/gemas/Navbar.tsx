@@ -11,9 +11,6 @@ const NAV_ITEMS: { key: ViewKey; label: string }[] = [
   { key: "cek-status-gizi", label: "Cek Status Gizi" },
   { key: "mp-asi", label: "MP-ASI" },
   { key: "makan-anak", label: "Makan Anak" },
-  { key: "pertumbuhan-anak", label: "Pertumbuhan Anak" },
-  { key: "edukasi-gizi", label: "Edukasi Gizi" },
-  { key: "buku-makanan", label: "Buku Makanan" },
   { key: "video-edukasi", label: "Video Edukasi" },
   { key: "hubungi-ahli", label: "Hubungi Ahli Gizi" },
   { key: "tentang", label: "Tentang GEMAS" },
@@ -65,7 +62,7 @@ export function Navbar() {
                 GEMAS
               </div>
               <div className="text-[10px] text-muted-foreground hidden sm:block font-medium">
-                Edukasi Makanan Anak Sehat
+                Gerakan Edukasi Makanan Anak Sehat
               </div>
             </div>
           </button>

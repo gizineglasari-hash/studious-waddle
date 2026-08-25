@@ -8,9 +8,6 @@ export type ViewKey =
   | "cek-status-gizi"
   | "mp-asi"
   | "makan-anak"
-  | "pertumbuhan-anak"
-  | "edukasi-gizi"
-  | "buku-makanan"
   | "video-edukasi"
   | "hubungi-ahli"
   | "tentang";

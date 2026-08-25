@@ -4,7 +4,6 @@ import {
   Calculator,
   Baby,
   Utensils,
-  BookOpen,
   PlayCircle,
   PhoneCall,
   ArrowRight,
@@ -57,15 +56,6 @@ const FEATURES: FeatureCard[] = [
     color: "text-emerald-700",
     bgColor: "bg-gradient-to-br from-emerald-100 to-teal-100",
     view: "makan-anak",
-  },
-  {
-    icon: BookOpen,
-    title: "Buku Foto Makanan",
-    description:
-      "Lihat contoh makanan berdasarkan ukuran rumah tangga (URT) dan porsinya, lengkap dengan informasi energi, protein, lemak, dan karbohidrat.",
-    color: "text-amber-700",
-    bgColor: "bg-gradient-to-br from-amber-100 to-yellow-100",
-    view: "buku-makanan",
   },
   {
     icon: PlayCircle,
@@ -138,7 +128,7 @@ export function HomeView() {
                 <Button
                   size="lg"
                   variant="outline"
-                  onClick={() => setView("edukasi-gizi")}
+                  onClick={() => setView("makan-anak")}
                   className="bg-white/80 backdrop-blur-sm border-green-300 text-green-700 hover:bg-green-50 hover:border-green-400 rounded-full px-6"
                 >
                   Pelajari Gizi Anak
@@ -301,11 +291,11 @@ export function HomeView() {
             <Button
               size="lg"
               variant="outline"
-              onClick={() => setView("buku-makanan")}
+              onClick={() => setView("video-edukasi")}
               className="bg-transparent border-white text-white hover:bg-white/10 rounded-full px-6"
             >
-              <BookOpen className="h-5 w-5 mr-2" />
-              Lihat Buku Makanan
+              <PlayCircle className="h-5 w-5 mr-2" />
+              Tonton Video Edukasi
             </Button>
           </div>
         </div>

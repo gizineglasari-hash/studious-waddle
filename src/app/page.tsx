@@ -6,9 +6,6 @@ import { HomeView } from "@/components/views/HomeView";
 import { CekStatusGiziView } from "@/components/views/CekStatusGiziView";
 import { MpasiView } from "@/components/views/MpasiView";
 import { MakanAnakView } from "@/components/views/MakanAnakView";
-import { PertumbuhanAnakView } from "@/components/views/PertumbuhanAnakView";
-import { EdukasiGiziView } from "@/components/views/EdukasiGiziView";
-import { BukuMakananView } from "@/components/views/BukuMakananView";
 import { VideoEdukasiView } from "@/components/views/VideoEdukasiView";
 import { HubungiAhliView } from "@/components/views/HubungiAhliView";
 import { TentangView } from "@/components/views/TentangView";
@@ -25,9 +22,6 @@ export default function Home() {
         {currentView === "cek-status-gizi" && <CekStatusGiziView />}
         {currentView === "mp-asi" && <MpasiView />}
         {currentView === "makan-anak" && <MakanAnakView />}
-        {currentView === "pertumbuhan-anak" && <PertumbuhanAnakView />}
-        {currentView === "edukasi-gizi" && <EdukasiGiziView />}
-        {currentView === "buku-makanan" && <BukuMakananView />}
         {currentView === "video-edukasi" && <VideoEdukasiView />}
         {currentView === "hubungi-ahli" && <HubungiAhliView />}
         {currentView === "tentang" && <TentangView />}

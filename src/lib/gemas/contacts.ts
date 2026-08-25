@@ -49,7 +49,7 @@ export const PUSKESMAS: PuskesmasInfo = {
   website: "", // PLACEHOLDER
   instagram: "", // PLACEHOLDER - isi @username
   facebook: "", // PLACEHOLDER - isi URL halaman Facebook
-  jamLayanan: "Senin - Jumat, 08.00 - 14.00 WIB",
+  jamLayanan: "Senin - Jumat, 08.00 - 14.00 WIB | Sabtu, 08.00 - 11.00 WIB",
   logo: "", // PLACEHOLDER - ganti dengan URL logo Puskesmas
 };
 

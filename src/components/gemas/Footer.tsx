@@ -8,8 +8,8 @@ const FOOTER_MENU: { key: ViewKey; label: string }[] = [
   { key: "home", label: "Beranda" },
   { key: "cek-status-gizi", label: "Status Gizi" },
   { key: "mp-asi", label: "MP-ASI" },
-  { key: "edukasi-gizi", label: "Edukasi" },
-  { key: "buku-makanan", label: "Buku Makanan" },
+  { key: "makan-anak", label: "Makan Anak" },
+  { key: "video-edukasi", label: "Video Edukasi" },
   { key: "hubungi-ahli", label: "Hubungi Ahli Gizi" },
 ];
 
