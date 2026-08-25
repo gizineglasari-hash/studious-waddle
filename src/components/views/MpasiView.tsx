@@ -16,7 +16,7 @@ interface AgeGroup {
   frequency: string;
   portion: string;
   sampleMenu: { time?: string; menu: string }[];
-  proteinHewani: string;
+  proteinHewani?: string; // optional - hanya tampil jika diisi
   tips: string[];
 }
 
@@ -37,7 +37,7 @@ const AGE_GROUPS: AgeGroup[] = [
       { menu: "Bubur kentang hati ayam wortel" },
       { menu: "Bubur kari ayam dan bayam" },
     ],
-    proteinHewani: "Wajib ditambahkan: 1 sendok teh daging/ikan/hati ayam yang dihaluskan setiap kali makan.",
+    // proteinHewani dihilangkan untuk usia 6-8 bulan sesuai permintaan
     tips: [
       "ASI tetap menjadi makanan utama, MP-ASI sebagai pelengkap.",
       "Perkenalkan satu jenis makanan baru setiap 3 hari untuk mendeteksi alergi.",
@@ -216,13 +216,15 @@ export function MpasiView() {
                       </h4>
                       <p className="text-sm text-gray-700 leading-relaxed">{group.portion}</p>
                     </div>
-                    <div className="bg-rose-50 border border-rose-200 rounded-lg p-3">
-                      <h4 className="text-sm font-semibold text-rose-900 mb-1 flex items-center gap-1.5">
-                        <AlertCircle className="h-4 w-4 text-rose-600" />
-                        Protein Hewani
-                      </h4>
-                      <p className="text-xs text-rose-800 leading-relaxed">{group.proteinHewani}</p>
-                    </div>
+                    {group.proteinHewani && (
+                      <div className="bg-rose-50 border border-rose-200 rounded-lg p-3">
+                        <h4 className="text-sm font-semibold text-rose-900 mb-1 flex items-center gap-1.5">
+                          <AlertCircle className="h-4 w-4 text-rose-600" />
+                          Protein Hewani
+                        </h4>
+                        <p className="text-xs text-rose-800 leading-relaxed">{group.proteinHewani}</p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Kanan */}
