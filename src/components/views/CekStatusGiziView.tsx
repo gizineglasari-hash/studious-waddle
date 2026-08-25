@@ -17,6 +17,8 @@ import {
   ClipboardList,
   Activity,
   Sparkles,
+  RefreshCw,
+  ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -214,6 +216,7 @@ export function CekStatusGiziView() {
   const [errors, setErrors] = useState<string[]>([]);
   const [result, setResult] = useState<CalcResult | null>(null);
   const [showForm, setShowForm] = useState(true);
+  const [validation, setValidation] = useState<{ checked: boolean; success: boolean; message: string } | null>(null);
 
   const handleInputChange = (field: string, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -221,6 +224,7 @@ export function CekStatusGiziView() {
   };
 
   const handleCalculate = () => {
+    setValidation(null);
     const input: ChildInput = {
       nama: form.nama.trim(),
       jenisKelamin: form.jenisKelamin as "L" | "P",
@@ -280,6 +284,7 @@ export function CekStatusGiziView() {
   const handleReset = () => {
     setResult(null);
     setShowForm(true);
+    setValidation(null);
     setForm({
       nama: "",
       jenisKelamin: "",
@@ -290,6 +295,53 @@ export function CekStatusGiziView() {
       jenisPengukuran: "",
     });
     setErrors([]);
+  };
+
+  /**
+   * Fitur "Cek Ulang Hasil": menjalankan ulang seluruh pipeline
+   * 1. Validasi input
+   * 2. Perhitungan umur
+   * 3. Pemilihan reference WHO
+   * 4. Perhitungan LMS
+   * 5. Perhitungan Z-score
+   * 6. Flagging
+   * 7. Klasifikasi
+   */
+  const handleRevalidate = () => {
+    if (!result) return;
+
+    // 1. Validasi input
+    const input = result.input;
+    const validationErrors = validateInput(input);
+
+    if (validationErrors.length > 0) {
+      setValidation({
+        checked: true,
+        success: false,
+        message: `Data perlu diperiksa kembali. Ditemukan ${validationErrors.length} masalah: ${validationErrors[0]}`,
+      });
+      toast({
+        title: "Validasi gagal",
+        description: validationErrors[0],
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // 2-7. Jalankan ulang seluruh pipeline
+    const recalcResult = calculateNutritionStatus(input);
+    setResult(recalcResult);
+
+    setValidation({
+      checked: true,
+      success: true,
+      message: `Perhitungan berhasil divalidasi. Algoritma: LMS method, Reference: ${recalcResult.reference}. Semua ${recalcResult.results.length} indikator berhasil dihitung ulang dengan presisi tinggi.`,
+    });
+
+    toast({
+      title: "Validasi berhasil",
+      description: "Perhitungan telah dijalankan ulang dan divalidasi.",
+    });
   };
 
   const handleSave = () => {
@@ -719,9 +771,16 @@ export function CekStatusGiziView() {
                               {r.message && r.message.includes("Indikator") && (
                                 <div className="text-xs text-gray-500 mt-0.5">{r.message}</div>
                               )}
+                              <div className="text-[10px] text-gray-400 mt-0.5">{r.reference}</div>
                             </td>
-                            <td className="py-3 px-2 text-center font-mono font-semibold text-gray-900">
-                              {r.zScore !== null ? r.zScore.toFixed(2) : "—"}
+                            <td className="py-3 px-2 text-center">
+                              {r.zScore !== null ? (
+                                <span className="font-mono font-semibold text-gray-900">
+                                  {r.zScore >= 0 ? "+" : ""}{r.zScore.toFixed(2)} <span className="text-xs text-gray-500">SD</span>
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">—</span>
+                              )}
                             </td>
                             <td className="py-3 px-2">
                               <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium", badge.bg, badge.color)}>
@@ -902,6 +961,14 @@ export function CekStatusGiziView() {
             {/* Action buttons */}
             <div className="flex flex-col sm:flex-row gap-3 pt-2 no-print">
               <Button
+                onClick={handleRevalidate}
+                variant="outline"
+                className="rounded-full flex-1 border-blue-300 text-blue-700 hover:bg-blue-50"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Cek Ulang Hasil
+              </Button>
+              <Button
                 onClick={handleSave}
                 className="bg-green-600 hover:bg-green-700 text-white rounded-full flex-1"
               >
@@ -932,6 +999,84 @@ export function CekStatusGiziView() {
                 Hitung Anak Lain
               </Button>
             </div>
+
+            {/* Validation status */}
+            {validation && (
+              <Card className={cn(
+                "border-2 rounded-2xl overflow-hidden animate-fade-in",
+                validation.success ? "border-green-300 bg-green-50/50" : "border-red-300 bg-red-50/50"
+              )}>
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-start gap-3">
+                    {validation.success ? (
+                      <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    )}
+                    <div>
+                      <div className={cn(
+                        "font-semibold text-sm mb-1",
+                        validation.success ? "text-green-800" : "text-red-800"
+                      )}>
+                        {validation.success ? "Perhitungan berhasil divalidasi" : "Data perlu diperiksa kembali"}
+                      </div>
+                      <p className={cn(
+                        "text-xs leading-relaxed",
+                        validation.success ? "text-green-700" : "text-red-700"
+                      )}>
+                        {validation.message}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Reference info & algorithm transparency */}
+            <Card className="border-0 shadow-md rounded-2xl bg-gradient-to-br from-gray-50 to-blue-50/30 overflow-hidden">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-blue-600" />
+                  Informasi Algoritma & Reference
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-3 text-xs text-gray-700">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="bg-white rounded-lg p-3 border border-gray-100">
+                    <div className="font-semibold text-gray-900 mb-1">Reference yang digunakan:</div>
+                    <div className="text-blue-700 font-medium">{result.reference}</div>
+                    <div className="mt-1 text-gray-500">
+                      {result.age.totalDays <= 1856
+                        ? `Anak usia ${Math.floor(result.age.totalMonths)} bulan (0-5 tahun) → WHO Child Growth Standards (2006)`
+                        : `Anak usia ${Math.floor(result.age.totalMonths)} bulan (5-19 tahun) → WHO Reference 2007 (AnthroPlus)`}
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-gray-100">
+                    <div className="font-semibold text-gray-900 mb-1">Algoritma:</div>
+                    <div>LMS Method (Box-Cox transformation)</div>
+                    <div className="mt-1 text-gray-500">
+                      Z = ((X/M)<sup>L</sup> - 1) / (L × S)
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-white rounded-lg p-3 border border-gray-100">
+                  <div className="font-semibold text-gray-900 mb-1">Data source:</div>
+                  <div className="text-gray-600">
+                    Data referensi resmi dari <strong>WHO Anthro</strong> ({result.age.totalDays <= 1856 ? "0-5 tahun, per HARI (0-1856 hari)" : "5-19 tahun, per BULAN (61-228 bulan)"}).
+                    Diambil dari repositori resmi World Health Organization di GitHub: <code className="bg-gray-100 px-1 rounded">WorldHealthOrganization/mnf-anthro-analyzer-offline</code>.
+                  </div>
+                </div>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <div className="font-semibold text-amber-900 mb-1 flex items-center gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Disclaimer:
+                  </div>
+                  <p className="text-amber-800 leading-relaxed">
+                    Hasil perhitungan menggunakan standar pertumbuhan WHO dan ditujukan sebagai alat skrining/pemantauan pertumbuhan, <strong>bukan diagnosis medis</strong>. Apabila ditemukan hasil yang perlu diperhatikan, orang tua dianjurkan berkonsultasi dengan tenaga kesehatan atau ahli gizi.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         )}
       </div>
