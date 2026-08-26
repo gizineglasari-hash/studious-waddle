@@ -128,11 +128,21 @@ export function AdminDashboardView() {
   const adminUser = getCurrentUser();
   const adminName = adminUser?.namaOrangTua || "Administrator";
 
+  // Safe stats - fallback to zeros if stats fails
+  const safeStats = stats || {
+    totalConsultations: 0,
+    menungguJawaban: 0,
+    sedangDiproses: 0,
+    sudahDijawab: 0,
+    selesai: 0,
+    totalUsers: 0,
+  };
+
   const statCards: StatCard[] = [
     {
       key: "total",
       label: "Total Konsultasi",
-      value: stats.totalConsultations,
+      value: safeStats.totalConsultations,
       icon: Inbox,
       bg: "bg-green-100",
       text: "text-green-700",
@@ -141,7 +151,7 @@ export function AdminDashboardView() {
     {
       key: "menunggu",
       label: "Menunggu Jawaban",
-      value: stats.menungguJawaban,
+      value: safeStats.menungguJawaban,
       icon: Clock,
       bg: "bg-orange-100",
       text: "text-orange-700",
@@ -150,7 +160,7 @@ export function AdminDashboardView() {
     {
       key: "diproses",
       label: "Sedang Diproses",
-      value: stats.sedangDiproses,
+      value: safeStats.sedangDiproses,
       icon: Loader2,
       bg: "bg-blue-100",
       text: "text-blue-700",
@@ -159,7 +169,7 @@ export function AdminDashboardView() {
     {
       key: "dijawab",
       label: "Sudah Dijawab",
-      value: stats.sudahDijawab,
+      value: safeStats.sudahDijawab,
       icon: CheckCircle2,
       bg: "bg-emerald-100",
       text: "text-emerald-700",
@@ -168,7 +178,7 @@ export function AdminDashboardView() {
     {
       key: "users",
       label: "Total Pengguna",
-      value: stats.totalUsers,
+      value: safeStats.totalUsers,
       icon: Users,
       bg: "bg-purple-100",
       text: "text-purple-700",
