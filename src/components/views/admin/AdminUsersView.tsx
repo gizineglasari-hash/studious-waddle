@@ -41,14 +41,23 @@ export function AdminUsersView() {
   const children = useAuthStore((s) => s.children);
   const consultations = useAuthStore((s) => s.consultations);
   const deleteUser = useAuthStore((s) => s.deleteUser);
+  const refreshData = useAuthStore((s) => s.refreshData);
   const [mounted, setMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [downloading, setDownloading] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Refresh data when this view mounts (admin)
+  useEffect(() => {
+    if (mounted && isAdmin) {
+      refreshData();
+    }
+  }, [mounted, isAdmin, refreshData]);
 
   useEffect(() => {
     if (mounted && !isAdmin) {
@@ -452,27 +461,53 @@ export function AdminUsersView() {
             <AlertDialogHeader>
               <AlertDialogTitle>Hapus Pengguna?</AlertDialogTitle>
               <AlertDialogDescription>
-                Apakah Anda yakin ingin menghapus pengguna ini? Semua data anak, konsultasi, dan notifikasi terkait juga akan dihapus. Tindakan ini tidak dapat dibatalkan.
+                Apakah Anda yakin ingin menghapus pengguna ini? Semua data anak, konsultasi, dan notifikasi terkait juga akan dihapus secara permanen dari sistem. Tindakan ini tidak dapat dibatalkan.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Batal</AlertDialogCancel>
+              <AlertDialogCancel disabled={!!deleting}>Batal</AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => {
-                  if (deleteTarget) {
-                    const result = deleteUser(deleteTarget);
+                disabled={!!deleting}
+                onClick={async (e) => {
+                  e.preventDefault();
+                  if (!deleteTarget) return;
+                  setDeleting(deleteTarget);
+                  try {
+                    const result = await deleteUser(deleteTarget);
                     if (result.success) {
                       toast({ title: "Pengguna dihapus", description: result.message });
+                      // Refresh data dari Supabase untuk memastikan sinkron
+                      await refreshData();
                     } else {
                       toast({ title: "Gagal hapus", description: result.message, variant: "destructive" });
+                      // Refresh juga untuk restore data yang di-rollback
+                      await refreshData();
                     }
                     setDeleteTarget(null);
+                  } catch (err) {
+                    console.error("Delete user error:", err);
+                    toast({
+                      title: "Error",
+                      description: "Terjadi kesalahan saat menghapus pengguna.",
+                      variant: "destructive",
+                    });
+                  } finally {
+                    setDeleting(null);
                   }
                 }}
                 className="bg-red-600 hover:bg-red-700 text-white"
               >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Hapus Pengguna
+                {deleting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Menghapus...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Hapus Pengguna
+                  </>
+                )}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

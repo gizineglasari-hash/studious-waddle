@@ -13,6 +13,7 @@ import {
   UserRound,
   LayoutDashboard,
   Trash2,
+  Loader2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,7 @@ export function AdminConsultationsView() {
   const [activeFilter, setActiveFilter] = useState<FilterTab>("Semua");
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   // Redirect if not admin
   useEffect(() => {
@@ -385,23 +387,47 @@ export function AdminConsultationsView() {
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Batal</AlertDialogCancel>
+              <AlertDialogCancel disabled={!!deleting}>Batal</AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => {
-                  if (deleteTarget) {
-                    const result = deleteConsultation(deleteTarget);
+                disabled={!!deleting}
+                onClick={async (e) => {
+                  e.preventDefault();
+                  if (!deleteTarget) return;
+                  setDeleting(deleteTarget);
+                  try {
+                    const result = await deleteConsultation(deleteTarget);
                     if (result.success) {
                       toast({ title: "Konsultasi dihapus", description: result.message });
+                      await refreshData();
                     } else {
                       toast({ title: "Gagal hapus", description: result.message, variant: "destructive" });
+                      await refreshData();
                     }
                     setDeleteTarget(null);
+                  } catch (err) {
+                    console.error("Delete consultation error:", err);
+                    toast({
+                      title: "Error",
+                      description: "Terjadi kesalahan saat menghapus konsultasi.",
+                      variant: "destructive",
+                    });
+                  } finally {
+                    setDeleting(null);
                   }
                 }}
                 className="bg-red-600 hover:bg-red-700 text-white"
               >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Hapus Konsultasi
+                {deleting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Menghapus...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Hapus Konsultasi
+                  </>
+                )}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

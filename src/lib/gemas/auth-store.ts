@@ -338,8 +338,8 @@ interface AuthState {
   markAllNotificationsRead: (userId: string) => void;
 
   // Delete actions (admin)
-  deleteUser: (userId: string) => { success: boolean; message: string };
-  deleteConsultation: (consultationId: string) => { success: boolean; message: string };
+  deleteUser: (userId: string) => Promise<{ success: boolean; message: string }>;
+  deleteConsultation: (consultationId: string) => Promise<{ success: boolean; message: string }>;
 
   // Stats (for admin)
   getStats: () => {
@@ -1272,56 +1272,208 @@ export const useAuthStore = create<AuthState>()(
       },
 
       // ============ DELETE ACTIONS ============
-      deleteUser: (userId) => {
-        // Remove user from localStorage
-        set((state) => ({
-          users: state.users.filter((u) => u.id !== userId),
-          children: state.children.filter((c) => c.userId !== userId),
-          consultations: state.consultations.filter((c) => c.userId !== userId),
-          notifications: state.notifications.filter((n) => n.userId !== userId),
-        }));
-
-        // Delete from Supabase
-        if (isSupabaseConfigured && supabase) {
-          void (async () => {
-            try {
-              // Delete consultations from broadcast table
-              await supabase.from("broadcast_consultations").delete().eq("user_id", userId);
-              // Delete from profiles
-              await supabase.from("profiles").delete().eq("id", userId);
-              // Delete children
-              await supabase.from("children").delete().eq("user_id", userId);
-              // Delete notifications
-              await supabase.from("notifications").delete().eq("user_id", userId);
-              console.log("[Supabase deleteUser] deleted:", userId);
-            } catch (err) {
-              console.warn("[Supabase deleteUser] exception:", err);
-            }
-          })();
+      deleteUser: async (userId) => {
+        if (!userId) {
+          return { success: false, message: "ID pengguna tidak valid." };
         }
 
-        return { success: true, message: "Pengguna berhasil dihapus." };
-      },
+        // Snapshot untuk rollback jika Supabase gagal
+        const state = get();
+        const deletedUser = state.users.find((u) => u.id === userId);
+        const deletedChildren = state.children.filter((c) => c.userId === userId);
+        const deletedConsultations = state.consultations.filter((c) => c.userId === userId);
+        const deletedNotifications = state.notifications.filter((n) => n.userId === userId);
 
-      deleteConsultation: (consultationId) => {
-        // Remove from localStorage
-        set((state) => ({
-          consultations: state.consultations.filter((c) => c.id !== consultationId),
-          notifications: state.notifications.filter((n) => n.consultationId !== consultationId),
+        // Optimistic: hapus dari local state dulu
+        set((s) => ({
+          users: s.users.filter((u) => u.id !== userId),
+          children: s.children.filter((c) => c.userId !== userId),
+          consultations: s.consultations.filter((c) => c.userId !== userId),
+          notifications: s.notifications.filter((n) => n.userId !== userId),
         }));
 
-        // Delete from Supabase
-        if (isSupabaseConfigured && supabase) {
-          void (async () => {
-            try {
-              await supabase.from("broadcast_consultations").delete().eq("id", consultationId);
-              await supabase.from("consultations").delete().eq("id", consultationId);
-              await supabase.from("notifications").delete().eq("consultation_id", consultationId);
-              console.log("[Supabase deleteConsultation] deleted:", consultationId);
-            } catch (err) {
-              console.warn("[Supabase deleteConsultation] exception:", err);
-            }
-          })();
+        // Jika Supabase tidak dikonfigurasi, selesai di sini
+        if (!isSupabaseConfigured || !supabase) {
+          return { success: true, message: "Pengguna berhasil dihapus (mode lokal)." };
+        }
+
+        // Hapus dari Supabase - urutan penting karena foreign key constraints
+        const errors: string[] = [];
+        try {
+          // 1. Hapus dari broadcast_consultations (tidak ada RLS, pasti berhasil)
+          const { error: e1 } = await supabase
+            .from("broadcast_consultations")
+            .delete()
+            .eq("user_id", userId);
+          if (e1) {
+            console.warn("[Supabase deleteUser] broadcast_consultations:", e1.message);
+            errors.push("broadcast_consultations");
+          }
+
+          // 2. Hapus notifications (foreign key ke consultations, hapus dulu)
+          const { error: e2 } = await supabase
+            .from("notifications")
+            .delete()
+            .eq("user_id", userId);
+          if (e2) {
+            console.warn("[Supabase deleteUser] notifications:", e2.message);
+            errors.push("notifications");
+          }
+
+          // 3. Hapus consultations (foreign key ke children & profiles)
+          const { error: e3 } = await supabase
+            .from("consultations")
+            .delete()
+            .eq("user_id", userId);
+          if (e3) {
+            console.warn("[Supabase deleteUser] consultations:", e3.message);
+            errors.push("consultations");
+          }
+
+          // 4. Hapus children (foreign key ke profiles)
+          const { error: e4 } = await supabase
+            .from("children")
+            .delete()
+            .eq("user_id", userId);
+          if (e4) {
+            console.warn("[Supabase deleteUser] children:", e4.message);
+            errors.push("children");
+          }
+
+          // 5. Hapus profile (terakhir, karena children/consultations butuh FK)
+          const { error: e5 } = await supabase
+            .from("profiles")
+            .delete()
+            .eq("id", userId);
+          if (e5) {
+            console.warn("[Supabase deleteUser] profiles:", e5.message);
+            errors.push("profiles");
+          }
+        } catch (err) {
+          console.error("[Supabase deleteUser] exception:", err);
+          errors.push("exception");
+        }
+
+        // Verifikasi: fetch profile untuk memastikan benar-benar terhapus
+        try {
+          const { data: verifyProfile } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("id", userId)
+            .maybeSingle();
+
+          if (verifyProfile) {
+            // Profile masih ada di Supabase - restore local state
+            console.error("[Supabase deleteUser] VERIFICATION FAILED: profile still exists");
+            set((s) => ({
+              users: [...s.users.filter((u) => u.id !== userId), deletedUser].filter(Boolean) as UserProfile[],
+              children: [...s.children, ...deletedChildren],
+              consultations: [...s.consultations, ...deletedConsultations],
+              notifications: [...s.notifications, ...deletedNotifications],
+            }));
+            return {
+              success: false,
+              message: `Gagal menghapus dari Supabase. Profile masih ada. Errors: ${errors.join(", ")}. Jalankan SQL supabase-fix-admin-delete.sql di Supabase Dashboard.`,
+            };
+          }
+        } catch (verifyErr) {
+          console.warn("[Supabase deleteUser] verify exception:", verifyErr);
+        }
+
+        // Refresh data dari Supabase untuk memastikan sinkron
+        try {
+          await get().refreshData();
+        } catch (refreshErr) {
+          console.warn("[Supabase deleteUser] refresh exception:", refreshErr);
+        }
+
+        if (errors.length > 0) {
+          return {
+            success: true,
+            message: `Pengguna berhasil dihapus. Beberapa tabel: ${errors.join(", ")} mungkin perlu dicek.`,
+          };
+        }
+
+        return { success: true, message: "Pengguna berhasil dihapus permanen dari sistem." };
+      },
+
+      deleteConsultation: async (consultationId) => {
+        if (!consultationId) {
+          return { success: false, message: "ID konsultasi tidak valid." };
+        }
+
+        // Snapshot untuk rollback
+        const state = get();
+        const deletedConsultation = state.consultations.find((c) => c.id === consultationId);
+        const deletedNotifications = state.notifications.filter((n) => n.consultationId === consultationId);
+
+        // Optimistic: hapus dari local state
+        set((s) => ({
+          consultations: s.consultations.filter((c) => c.id !== consultationId),
+          notifications: s.notifications.filter((n) => n.consultationId !== consultationId),
+        }));
+
+        if (!isSupabaseConfigured || !supabase) {
+          return { success: true, message: "Konsultasi berhasil dihapus (mode lokal)." };
+        }
+
+        const errors: string[] = [];
+        try {
+          // 1. Hapus dari broadcast_consultations (no RLS)
+          const { error: e1 } = await supabase
+            .from("broadcast_consultations")
+            .delete()
+            .eq("id", consultationId);
+          if (e1) {
+            console.warn("[Supabase deleteConsultation] broadcast:", e1.message);
+            errors.push("broadcast_consultations");
+          }
+
+          // 2. Hapus notifications
+          const { error: e2 } = await supabase
+            .from("notifications")
+            .delete()
+            .eq("consultation_id", consultationId);
+          if (e2) {
+            console.warn("[Supabase deleteConsultation] notifications:", e2.message);
+            errors.push("notifications");
+          }
+
+          // 3. Hapus consultations (might not exist if only broadcast was used)
+          const { error: e3 } = await supabase
+            .from("consultations")
+            .delete()
+            .eq("id", consultationId);
+          if (e3 && !e3.message.includes("0 rows")) {
+            console.warn("[Supabase deleteConsultation] consultations:", e3.message);
+            errors.push("consultations");
+          }
+        } catch (err) {
+          console.error("[Supabase deleteConsultation] exception:", err);
+          errors.push("exception");
+        }
+
+        // Verifikasi
+        try {
+          const { data: verifyConsult } = await supabase
+            .from("broadcast_consultations")
+            .select("id")
+            .eq("id", consultationId)
+            .maybeSingle();
+
+          if (verifyConsult) {
+            console.error("[Supabase deleteConsultation] VERIFICATION FAILED");
+            set((s) => ({
+              consultations: deletedConsultation ? [...s.consultations, deletedConsultation] : s.consultations,
+              notifications: [...s.notifications, ...deletedNotifications],
+            }));
+            return {
+              success: false,
+              message: `Gagal menghapus konsultasi. Errors: ${errors.join(", ")}`,
+            };
+          }
+        } catch (verifyErr) {
+          console.warn("[Supabase deleteConsultation] verify exception:", verifyErr);
         }
 
         return { success: true, message: "Konsultasi berhasil dihapus." };
@@ -1492,10 +1644,25 @@ export const useAuthStore = create<AuthState>()(
           }
           const notifications = notificationRows.map(mapNotificationRow);
 
-          // Fetch children (current user only).
+          // Fetch children.
+          // IMPORTANT: When admin, fetch ALL children (not just admin's own).
+          // When regular user, fetch only their own children.
           let children: ChildProfile[] = [];
+          let childrenFetchOk = false;
           try {
-            if (currentUserId && !currentUserId.startsWith("supabase-pending-")) {
+            if (isAdmin) {
+              // Admin melihat SEMUA data anak dari semua user
+              const { data, error } = await supabase
+                .from("children")
+                .select("*")
+                .order("created_at", { ascending: false });
+              if (error) {
+                console.warn("[Supabase refreshData] children (admin):", error.message);
+              } else if (data) {
+                children = (data as ChildRow[]).map(mapChildRow);
+                childrenFetchOk = true;
+              }
+            } else if (currentUserId && !currentUserId.startsWith("supabase-pending-")) {
               const { data, error } = await supabase
                 .from("children")
                 .select("*")
@@ -1505,6 +1672,7 @@ export const useAuthStore = create<AuthState>()(
                 console.warn("[Supabase refreshData] children:", error.message);
               } else if (data) {
                 children = (data as ChildRow[]).map(mapChildRow);
+                childrenFetchOk = true;
               }
             }
           } catch (e) {
@@ -1513,6 +1681,7 @@ export const useAuthStore = create<AuthState>()(
 
           // For admins, also fetch profiles.
           let users: UserProfile[] = [];
+          let usersFetchOk = false;
           try {
             if (isAdmin) {
               const { data, error } = await supabase
@@ -1523,6 +1692,7 @@ export const useAuthStore = create<AuthState>()(
                 console.warn("[Supabase refreshData] profiles:", error.message);
               } else if (data) {
                 users = (data as ProfileRow[]).map((row) => mapProfileRow(row));
+                usersFetchOk = true;
               }
             } else if (currentUserId) {
               // Make sure the current user's profile is in local state.
@@ -1534,10 +1704,13 @@ export const useAuthStore = create<AuthState>()(
           }
 
           set((state) => ({
+            // Consultations & notifications: only overwrite if we got data
             consultations: consultationRows.length > 0 ? consultations : state.consultations,
             notifications: notificationRows.length > 0 ? notifications : state.notifications,
-            children: children.length > 0 ? children : state.children,
-            users: users.length > 0 ? users : state.users,
+            // Children: overwrite if fetch succeeded (even if 0 results - e.g. after delete)
+            children: childrenFetchOk ? children : state.children,
+            // Users: overwrite if fetch succeeded (admin case - reflects deletes)
+            users: usersFetchOk ? users : state.users,
             lastRefreshedAt: new Date().toISOString(),
             isAuthLoading: false,
           }));
