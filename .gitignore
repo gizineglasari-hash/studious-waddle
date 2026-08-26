@@ -90,3 +90,6 @@ server.log
 # Build outputs
 build/
 out/
+
+# Upload folder (source files, sudah diduplikasi ke public/)
+/upload/
