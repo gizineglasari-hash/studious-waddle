@@ -13,6 +13,7 @@ import { TentangView } from "@/components/views/TentangView";
 import { AdminAnalyticsView } from "@/components/views/AdminAnalyticsView";
 import { AnalyticsPengunjungView } from "@/components/views/admin/AnalyticsPengunjungView";
 import { EditWebsiteView } from "@/components/views/admin/EditWebsiteView";
+import { ErrorBoundary } from "@/components/gemas/ErrorBoundary";
 import { LoginView } from "@/components/views/auth/LoginView";
 import { UserDashboardView } from "@/components/views/auth/UserDashboardView";
 import { ConsultationFormView } from "@/components/views/auth/ConsultationFormView";
@@ -110,14 +111,38 @@ export default function Home() {
         {currentView === "user-dashboard" && <UserDashboardView />}
         {currentView === "consultation-form" && <ConsultationFormView />}
         {currentView === "consultation-detail" && <ConsultationDetailView />}
-        {/* Admin Views */}
+        {/* Admin Views - wrapped with ErrorBoundary */}
         {currentView === "admin-login" && <AdminLoginView />}
-        {currentView === "admin-dashboard" && <AdminDashboardView />}
-        {currentView === "admin-consultations" && <AdminConsultationsView />}
-        {currentView === "admin-consultation-detail" && <AdminConsultationDetailView />}
-        {currentView === "admin-history" && <AdminConsultationsView />}
-        {currentView === "admin-analytics-pengunjung" && <AnalyticsPengunjungView />}
-        {currentView === "admin-edit-website" && <EditWebsiteView />}
+        {currentView === "admin-dashboard" && (
+          <ErrorBoundary>
+            <AdminDashboardView />
+          </ErrorBoundary>
+        )}
+        {currentView === "admin-consultations" && (
+          <ErrorBoundary>
+            <AdminConsultationsView />
+          </ErrorBoundary>
+        )}
+        {currentView === "admin-consultation-detail" && (
+          <ErrorBoundary>
+            <AdminConsultationDetailView />
+          </ErrorBoundary>
+        )}
+        {currentView === "admin-history" && (
+          <ErrorBoundary>
+            <AdminConsultationsView />
+          </ErrorBoundary>
+        )}
+        {currentView === "admin-analytics-pengunjung" && (
+          <ErrorBoundary>
+            <AnalyticsPengunjungView />
+          </ErrorBoundary>
+        )}
+        {currentView === "admin-edit-website" && (
+          <ErrorBoundary>
+            <EditWebsiteView />
+          </ErrorBoundary>
+        )}
       </main>
       {!isHiddenView && <Footer />}
     </div>
