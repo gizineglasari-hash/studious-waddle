@@ -11,19 +11,33 @@ import { VideoEdukasiView } from "@/components/views/VideoEdukasiView";
 import { HubungiAhliView } from "@/components/views/HubungiAhliView";
 import { TentangView } from "@/components/views/TentangView";
 import { AdminAnalyticsView } from "@/components/views/AdminAnalyticsView";
+import { LoginView } from "@/components/views/auth/LoginView";
+import { UserDashboardView } from "@/components/views/auth/UserDashboardView";
+import { ConsultationFormView } from "@/components/views/auth/ConsultationFormView";
+import { ConsultationDetailView } from "@/components/views/auth/ConsultationDetailView";
+import { AdminLoginView } from "@/components/views/admin/AdminLoginView";
+import { AdminDashboardView } from "@/components/views/admin/AdminDashboardView";
+import { AdminConsultationsView } from "@/components/views/admin/AdminConsultationsView";
+import { AdminConsultationDetailView } from "@/components/views/admin/AdminConsultationDetailView";
 import { useGemasStore } from "@/lib/gemas/store";
 
 export default function Home() {
   const { currentView, setView } = useGemasStore();
 
   // Secret admin access triggers:
-  // 1. Keyboard shortcut: Ctrl + Shift + A
-  // 2. URL hash: #admin-gemas-tersembunyi
+  // 1. Keyboard shortcut: Ctrl + Shift + A (analytics)
+  // 2. Keyboard shortcut: Ctrl + Shift + L (admin login)
+  // 3. URL hash: #admin-gemas-tersembunyi (analytics)
+  // 4. URL hash: #admin-login (admin login)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && (e.key === "A" || e.key === "a")) {
         e.preventDefault();
         setView("admin-analytics");
+      }
+      if (e.ctrlKey && e.shiftKey && (e.key === "L" || e.key === "l")) {
+        e.preventDefault();
+        setView("admin-login");
       }
     };
 
@@ -31,7 +45,12 @@ export default function Home() {
       const hash = window.location.hash.toLowerCase();
       if (hash === "#admin-gemas-tersembunyi" || hash === "#admin-gemas" || hash === "#admin") {
         setView("admin-analytics");
-        // Clear hash to keep it secret
+        if (window.history && window.history.replaceState) {
+          window.history.replaceState(null, "", window.location.pathname);
+        }
+      }
+      if (hash === "#admin-login" || hash === "#login-admin") {
+        setView("admin-login");
         if (window.history && window.history.replaceState) {
           window.history.replaceState(null, "", window.location.pathname);
         }
@@ -48,12 +67,23 @@ export default function Home() {
     };
   }, [setView]);
 
-  const isAdminView = currentView === "admin-analytics";
+  // Views that should NOT show Navbar & Footer (auth, admin, analytics)
+  const isHiddenView =
+    currentView === "admin-analytics" ||
+    currentView === "login" ||
+    currentView === "register" ||
+    currentView === "user-dashboard" ||
+    currentView === "consultation-form" ||
+    currentView === "consultation-detail" ||
+    currentView === "admin-login" ||
+    currentView === "admin-dashboard" ||
+    currentView === "admin-consultations" ||
+    currentView === "admin-consultation-detail" ||
+    currentView === "admin-history";
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      {/* Hide Navbar & Footer on admin view for secrecy */}
-      {!isAdminView && <Navbar />}
+      {!isHiddenView && <Navbar />}
       <main className="flex-1">
         {currentView === "home" && <HomeView />}
         {currentView === "cek-status-gizi" && <CekStatusGiziView />}
@@ -63,8 +93,19 @@ export default function Home() {
         {currentView === "hubungi-ahli" && <HubungiAhliView />}
         {currentView === "tentang" && <TentangView />}
         {currentView === "admin-analytics" && <AdminAnalyticsView />}
+        {/* Auth & Consultation Views */}
+        {(currentView === "login" || currentView === "register") && <LoginView />}
+        {currentView === "user-dashboard" && <UserDashboardView />}
+        {currentView === "consultation-form" && <ConsultationFormView />}
+        {currentView === "consultation-detail" && <ConsultationDetailView />}
+        {/* Admin Views */}
+        {currentView === "admin-login" && <AdminLoginView />}
+        {currentView === "admin-dashboard" && <AdminDashboardView />}
+        {currentView === "admin-consultations" && <AdminConsultationsView />}
+        {currentView === "admin-consultation-detail" && <AdminConsultationDetailView />}
+        {currentView === "admin-history" && <AdminConsultationsView />}
       </main>
-      {!isAdminView && <Footer />}
+      {!isHiddenView && <Footer />}
     </div>
   );
 }

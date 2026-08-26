@@ -11,7 +11,18 @@ export type ViewKey =
   | "video-edukasi"
   | "hubungi-ahli"
   | "tentang"
-  | "admin-analytics"; // hidden admin view (access via Ctrl+Shift+A or #admin-gemas-tersembunyi)
+  | "admin-analytics" // hidden admin analytics view
+  // Auth & Consultation views
+  | "login"
+  | "register"
+  | "user-dashboard"
+  | "consultation-form"
+  | "consultation-detail"
+  | "admin-login"
+  | "admin-dashboard"
+  | "admin-consultations"
+  | "admin-consultation-detail"
+  | "admin-history";
 
 export interface MeasurementRecord {
   id: string;
@@ -38,7 +49,9 @@ export interface MeasurementRecord {
 interface GemasState {
   currentView: ViewKey;
   history: MeasurementRecord[];
+  selectedConsultationId: string | null;
   setView: (view: ViewKey) => void;
+  setViewWithConsultation: (view: ViewKey, consultationId: string) => void;
   addMeasurement: (record: MeasurementRecord) => void;
   removeMeasurement: (id: string) => void;
   clearHistory: () => void;
@@ -49,8 +62,15 @@ export const useGemasStore = create<GemasState>()(
     (set) => ({
       currentView: "home",
       history: [],
+      selectedConsultationId: null,
       setView: (view) => {
         set({ currentView: view });
+        if (typeof window !== "undefined") {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+      },
+      setViewWithConsultation: (view, consultationId) => {
+        set({ currentView: view, selectedConsultationId: consultationId });
         if (typeof window !== "undefined") {
           window.scrollTo({ top: 0, behavior: "smooth" });
         }

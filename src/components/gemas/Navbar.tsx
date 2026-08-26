@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Menu, X, Heart, Activity } from "lucide-react";
+import { Menu, X, Heart, Activity, Bell, User, LogOut, ChevronDown, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useGemasStore, type ViewKey } from "@/lib/gemas/store";
+import { useAuthStore } from "@/lib/gemas/auth-store";
 
 const NAV_ITEMS: { key: ViewKey; label: string }[] = [
   { key: "home", label: "Beranda" },
@@ -19,7 +21,13 @@ const NAV_ITEMS: { key: ViewKey; label: string }[] = [
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const { currentView, setView } = useGemasStore();
+  const { getCurrentUser, logout, getUnreadNotificationCount, isAdmin, adminLogout } = useAuthStore();
+
+  const currentUser = getCurrentUser();
+  const isLoggedIn = !!currentUser;
+  const unreadCount = isLoggedIn ? getUnreadNotificationCount(currentUser.id) : 0;
 
   // Track visit for admin analytics (localStorage based)
   useEffect(() => {
@@ -166,6 +174,87 @@ export function Navbar() {
             </Button>
           </div>
 
+          {/* User menu / Login (desktop) */}
+          <div className="hidden xl:flex items-center gap-2 flex-shrink-0">
+            {isLoggedIn ? (
+              <>
+                {/* Notification bell */}
+                <button
+                  onClick={() => handleNav("user-dashboard")}
+                  className="relative p-2 rounded-lg hover:bg-green-50 transition-colors"
+                  aria-label="Notifikasi"
+                >
+                  <Bell className="h-5 w-5 text-gray-700" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* User avatar dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setUserMenuOpen(!userMenuOpen)}
+                    className="flex items-center gap-1.5 p-1 pr-2 rounded-full hover:bg-green-50 transition-colors"
+                  >
+                    <div className="h-8 w-8 rounded-full bg-green-600 flex items-center justify-center text-white text-sm font-bold">
+                      {currentUser.namaOrangTua.charAt(0).toUpperCase()}
+                    </div>
+                    <ChevronDown className="h-3 w-3 text-gray-500" />
+                  </button>
+                  {userMenuOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setUserMenuOpen(false)}
+                      />
+                      <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-2 z-50">
+                        <div className="px-3 py-2 border-b border-gray-100">
+                          <p className="text-sm font-semibold text-gray-900 truncate">
+                            {currentUser.namaOrangTua}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">{currentUser.email}</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            handleNav("user-dashboard");
+                            setUserMenuOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-green-50 flex items-center gap-2"
+                        >
+                          <LayoutDashboard className="h-4 w-4 text-green-600" />
+                          Dashboard Saya
+                        </button>
+                        <button
+                          onClick={() => {
+                            logout();
+                            setUserMenuOpen(false);
+                            handleNav("home");
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                        >
+                          <LogOut className="h-4 w-4" />
+                          Keluar
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleNav("login")}
+                className="rounded-full border-green-300 text-green-700 hover:bg-green-50"
+              >
+                  <User className="h-4 w-4 mr-1" />
+                  Masuk
+                </Button>
+            )}
+          </div>
+
           {/* Mobile hamburger */}
           <button
             type="button"
@@ -208,6 +297,56 @@ export function Navbar() {
             >
               Cek Status Gizi Anak
             </Button>
+
+            {/* User menu in mobile */}
+            <div className="pt-3 mt-3 border-t border-gray-100">
+              {isLoggedIn ? (
+                <>
+                  <div className="flex items-center gap-2 px-3 py-2 mb-2">
+                    <div className="h-9 w-9 rounded-full bg-green-600 flex items-center justify-center text-white text-sm font-bold">
+                      {currentUser.namaOrangTua.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{currentUser.namaOrangTua}</p>
+                      {unreadCount > 0 && (
+                        <p className="text-xs text-red-600">{unreadCount} notifikasi belum dibaca</p>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleNav("user-dashboard")}
+                    className="w-full rounded-full border-green-300 text-green-700 hover:bg-green-50 mb-2"
+                  >
+                    <LayoutDashboard className="h-4 w-4 mr-2" />
+                    Dashboard Saya
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      logout();
+                      handleNav("home");
+                    }}
+                    className="w-full rounded-full border-red-300 text-red-600 hover:bg-red-50"
+                  >
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Keluar
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={() => handleNav("login")}
+                  className="w-full rounded-full border-green-300 text-green-700 hover:bg-green-50"
+                  variant="outline"
+                >
+                  <User className="h-4 w-4 mr-2" />
+                  Masuk / Daftar
+                </Button>
+              )}
+            </div>
           </nav>
         </div>
       )}
