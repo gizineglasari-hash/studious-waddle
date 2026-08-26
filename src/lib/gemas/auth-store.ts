@@ -1361,90 +1361,107 @@ export const useAuthStore = create<AuthState>()(
         try {
           // Fetch consultations.
           let consultationRows: ConsultationRow[] = [];
-          if (isAdmin) {
-            // Admins see every consultation.
-            const { data, error } = await supabase
-              .from("consultations")
-              .select("*")
-              .order("created_at", { ascending: false });
-            if (error) {
-              console.error("[Supabase refreshData] consultations error:", error.message);
-            } else if (data) {
-              consultationRows = data as ConsultationRow[];
+          try {
+            if (isAdmin) {
+              // Admins see every consultation.
+              // Note: For default admin (not signed in to Supabase Auth),
+              // this may fail due to RLS. That's OK - we fall back to local data.
+              const { data, error } = await supabase
+                .from("consultations")
+                .select("*")
+                .order("created_at", { ascending: false });
+              if (error) {
+                console.warn("[Supabase refreshData] consultations (admin):", error.message);
+              } else if (data) {
+                consultationRows = data as ConsultationRow[];
+              }
+            } else if (currentUserId && !currentUserId.startsWith("supabase-pending-")) {
+              const { data, error } = await supabase
+                .from("consultations")
+                .select("*")
+                .eq("user_id", currentUserId)
+                .order("created_at", { ascending: false });
+              if (error) {
+                console.warn("[Supabase refreshData] consultations:", error.message);
+              } else if (data) {
+                consultationRows = data as ConsultationRow[];
+              }
             }
-          } else if (currentUserId) {
-            const { data, error } = await supabase
-              .from("consultations")
-              .select("*")
-              .eq("user_id", currentUserId)
-              .order("created_at", { ascending: false });
-            if (error) {
-              console.error("[Supabase refreshData] consultations error:", error.message);
-            } else if (data) {
-              consultationRows = data as ConsultationRow[];
-            }
+          } catch (e) {
+            console.warn("[Supabase refreshData] consultations exception:", e);
           }
           const consultations = consultationRows.map(mapConsultationRow);
 
           // Fetch notifications.
           let notificationRows: NotificationRow[] = [];
-          if (isAdmin) {
-            // Admins see notifications addressed to "admin".
-            const { data, error } = await supabase
-              .from("notifications")
-              .select("*")
-              .eq("user_id", "admin")
-              .order("created_at", { ascending: false });
-            if (error) {
-              console.error("[Supabase refreshData] notifications error:", error.message);
-            } else if (data) {
-              notificationRows = data as NotificationRow[];
+          try {
+            if (isAdmin) {
+              const { data, error } = await supabase
+                .from("notifications")
+                .select("*")
+                .eq("user_id", "admin")
+                .order("created_at", { ascending: false });
+              if (error) {
+                console.warn("[Supabase refreshData] notifications (admin):", error.message);
+              } else if (data) {
+                notificationRows = data as NotificationRow[];
+              }
+            } else if (currentUserId && !currentUserId.startsWith("supabase-pending-")) {
+              const { data, error } = await supabase
+                .from("notifications")
+                .select("*")
+                .eq("user_id", currentUserId)
+                .order("created_at", { ascending: false });
+              if (error) {
+                console.warn("[Supabase refreshData] notifications:", error.message);
+              } else if (data) {
+                notificationRows = data as NotificationRow[];
+              }
             }
-          } else if (currentUserId) {
-            const { data, error } = await supabase
-              .from("notifications")
-              .select("*")
-              .eq("user_id", currentUserId)
-              .order("created_at", { ascending: false });
-            if (error) {
-              console.error("[Supabase refreshData] notifications error:", error.message);
-            } else if (data) {
-              notificationRows = data as NotificationRow[];
-            }
+          } catch (e) {
+            console.warn("[Supabase refreshData] notifications exception:", e);
           }
           const notifications = notificationRows.map(mapNotificationRow);
 
           // Fetch children (current user only).
           let children: ChildProfile[] = [];
-          if (currentUserId) {
-            const { data, error } = await supabase
-              .from("children")
-              .select("*")
-              .eq("user_id", currentUserId)
-              .order("created_at", { ascending: false });
-            if (error) {
-              console.error("[Supabase refreshData] children error:", error.message);
-            } else if (data) {
-              children = (data as ChildRow[]).map(mapChildRow);
+          try {
+            if (currentUserId && !currentUserId.startsWith("supabase-pending-")) {
+              const { data, error } = await supabase
+                .from("children")
+                .select("*")
+                .eq("user_id", currentUserId)
+                .order("created_at", { ascending: false });
+              if (error) {
+                console.warn("[Supabase refreshData] children:", error.message);
+              } else if (data) {
+                children = (data as ChildRow[]).map(mapChildRow);
+              }
             }
+          } catch (e) {
+            console.warn("[Supabase refreshData] children exception:", e);
           }
 
-          // For admins, also fetch a lightweight user count via profiles.
+          // For admins, also fetch profiles.
           let users: UserProfile[] = [];
-          if (isAdmin) {
-            const { data, error } = await supabase
-              .from("profiles")
-              .select("*")
-              .order("created_at", { ascending: false });
-            if (error) {
-              console.error("[Supabase refreshData] profiles error:", error.message);
-            } else if (data) {
-              users = (data as ProfileRow[]).map((row) => mapProfileRow(row));
+          try {
+            if (isAdmin) {
+              const { data, error } = await supabase
+                .from("profiles")
+                .select("*")
+                .order("created_at", { ascending: false });
+              if (error) {
+                console.warn("[Supabase refreshData] profiles:", error.message);
+              } else if (data) {
+                users = (data as ProfileRow[]).map((row) => mapProfileRow(row));
+              }
+            } else if (currentUserId) {
+              // Make sure the current user's profile is in local state.
+              const existing = get().users.find((u) => u.id === currentUserId);
+              users = existing ? [existing] : [];
             }
-          } else if (currentUserId) {
-            // Make sure the current user's profile is in local state.
-            const existing = get().users.find((u) => u.id === currentUserId);
-            users = existing ? [existing] : [];
+          } catch (e) {
+            console.warn("[Supabase refreshData] profiles exception:", e);
           }
 
           set((state) => ({
