@@ -106,11 +106,19 @@ export default function Home() {
         {currentView === "hubungi-ahli" && <HubungiAhliView />}
         {currentView === "tentang" && <TentangView />}
         {currentView === "admin-analytics" && <AdminAnalyticsView />}
-        {/* Auth & Consultation Views */}
-        {(currentView === "login" || currentView === "register" || currentView === "reset-password") && <LoginView />}
-        {currentView === "user-dashboard" && <UserDashboardView />}
-        {currentView === "consultation-form" && <ConsultationFormView />}
-        {currentView === "consultation-detail" && <ConsultationDetailView />}
+        {/* Auth & Consultation Views - wrapped with ErrorBoundary */}
+        {(currentView === "login" || currentView === "register" || currentView === "reset-password") && (
+          <ErrorBoundary><LoginView /></ErrorBoundary>
+        )}
+        {currentView === "user-dashboard" && (
+          <ErrorBoundary><UserDashboardView /></ErrorBoundary>
+        )}
+        {currentView === "consultation-form" && (
+          <ErrorBoundary><ConsultationFormView /></ErrorBoundary>
+        )}
+        {currentView === "consultation-detail" && (
+          <ErrorBoundary><ConsultationDetailView /></ErrorBoundary>
+        )}
         {/* Admin Views - wrapped with ErrorBoundary */}
         {currentView === "admin-login" && <AdminLoginView />}
         {currentView === "admin-dashboard" && (
