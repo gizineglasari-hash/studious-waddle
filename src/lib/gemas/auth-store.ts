@@ -1291,10 +1291,20 @@ export const useAuthStore = create<AuthState>()(
           const { data: sessionData, error } = await supabase.auth.getSession();
           if (error) {
             console.error("[Supabase restoreSession] error:", error.message);
+            set({ isAuthLoading: false });
             return;
           }
           const user = sessionData?.session?.user;
           if (!user) {
+            // No active Supabase session.
+            // DON'T clear currentUserId - it might be set by optimistic login
+            // or by localStorage persistence. Only clear if it's a placeholder.
+            const { currentUserId } = get();
+            if (currentUserId && currentUserId.startsWith("supabase-pending-")) {
+              set({ currentUserId: null, isAuthLoading: false });
+            } else {
+              set({ isAuthLoading: false });
+            }
             return;
           }
 
@@ -1307,7 +1317,7 @@ export const useAuthStore = create<AuthState>()(
               .eq("id", user.id)
               .maybeSingle();
             if (profileError) {
-              console.error("[Supabase restoreSession] profile error:", profileError.message);
+              console.warn("[Supabase restoreSession] profile error:", profileError.message);
             }
             if (profileRow) {
               profile = mapProfileRow(profileRow as ProfileRow, user.email);
@@ -1325,7 +1335,7 @@ export const useAuthStore = create<AuthState>()(
               };
             }
           } catch (err) {
-            console.error("[Supabase restoreSession] profile fetch exception:", err);
+            console.warn("[Supabase restoreSession] profile fetch exception:", err);
           }
 
           const is_admin =
@@ -1350,6 +1360,7 @@ export const useAuthStore = create<AuthState>()(
           await get().refreshData();
         } catch (err) {
           console.error("[Supabase restoreSession] exception:", err);
+          set({ isAuthLoading: false });
         }
       },
 

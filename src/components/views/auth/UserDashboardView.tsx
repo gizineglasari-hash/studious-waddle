@@ -81,15 +81,9 @@ export function UserDashboardView() {
   } = useAuthStore();
 
   const user = getCurrentUser();
+  const isAuthLoading = useAuthStore((s) => s.isAuthLoading);
 
-  // Redirect if not logged in (effect runs after mount)
-  useEffect(() => {
-    if (!user) {
-      setView("login");
-    }
-  }, [user, setView]);
-
-  // Profile editing
+  // Profile editing - ALL hooks must be before any conditional return
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({
     namaOrangTua: "",
@@ -98,7 +92,30 @@ export function UserDashboardView() {
     alamat: "",
   });
   const [savingProfile, setSavingProfile] = useState(false);
+  const [showChildForm, setShowChildForm] = useState(false);
+  const [childForm, setChildForm] = useState({
+    namaAnak: "",
+    tanggalLahir: "",
+    jenisKelamin: "L" as "L" | "P",
+    beratBadan: "",
+    tinggiBadan: "",
+  });
+  const [savingChild, setSavingChild] = useState(false);
+  const [showNotif, setShowNotif] = useState(false);
 
+  // Redirect if not logged in
+  useEffect(() => {
+    if (isAuthLoading) return;
+    if (user) return;
+    const timer = setTimeout(() => {
+      if (!getCurrentUser()) {
+        setView("login");
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [user, isAuthLoading, setView, getCurrentUser]);
+
+  // Sync profile form when user changes
   useEffect(() => {
     if (user) {
       setProfileForm({
@@ -109,6 +126,12 @@ export function UserDashboardView() {
       });
     }
   }, [user]);
+
+  // Notifications
+  const notifications = useMemo(() => {
+    if (!user) return [];
+    return getNotificationsByUser(user.id);
+  }, [user, getNotificationsByUser]);
 
   const startEditProfile = () => {
     if (user) {
@@ -275,12 +298,12 @@ export function UserDashboardView() {
   const children = user ? getChildrenByUser(user.id) : [];
 
   // Loading / redirect state
-  if (!user) {
+  if (isAuthLoading || !user) {
     return (
-      <div className="animate-fade-in min-h-[60vh] flex items-center justify-center bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50">
+      <div className="animate-fade-in min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50">
         <div className="text-center">
-          <span className="h-8 w-8 mx-auto mb-3 inline-block animate-spin rounded-full border-4 border-green-200 border-t-green-600" />
-          <p className="text-sm text-gray-600">Memuat dashboard...</p>
+          <span className="h-10 w-10 mx-auto mb-4 inline-block animate-spin rounded-full border-4 border-green-200 border-t-green-600" />
+          <p className="text-sm text-gray-600">{isAuthLoading ? "Memuat data pengguna..." : "Memuat dashboard..."}</p>
         </div>
       </div>
     );

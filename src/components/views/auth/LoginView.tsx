@@ -64,7 +64,7 @@ export function LoginView() {
   };
 
   // ---------------- LOGIN ----------------
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!email.trim() || !password.trim()) {
@@ -82,9 +82,12 @@ export function LoginView() {
       if (result.success) {
         toast({
           title: "Login berhasil",
-          description: "Selamat datang kembali di GEMAS.",
+          description: "Selamat datang kembali di Koniciwa Gemas Gempita.",
         });
-        setView("user-dashboard");
+        // Small delay to allow state to settle before navigating
+        setTimeout(() => {
+          setView("user-dashboard");
+        }, 300);
       } else {
         toast({
           title: "Login gagal",

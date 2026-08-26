@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Navbar } from "@/components/gemas/Navbar";
 import { Footer } from "@/components/gemas/Footer";
 import { HomeView } from "@/components/views/HomeView";
@@ -30,10 +30,12 @@ export default function Home() {
   const { currentView, setView } = useGemasStore();
 
   // Restore Supabase session on app load (multi-device auth)
+  // Only run ONCE on mount
   const restoreSession = useAuthStore((s) => s.restoreSession);
   useEffect(() => {
     restoreSession();
-  }, [restoreSession]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Secret admin access triggers:
   // 1. Keyboard shortcut: Ctrl + Shift + A (analytics)
