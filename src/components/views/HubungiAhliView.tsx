@@ -30,9 +30,19 @@ export function HubungiAhliView() {
         <Card className="border-0 shadow-xl rounded-2xl overflow-hidden mb-6">
           <CardHeader className="bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 pb-3">
             <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-5">
-              {/* Foto placeholder */}
-              <div className="h-24 w-24 sm:h-28 sm:w-28 rounded-2xl bg-gradient-to-br from-green-200 to-emerald-300 flex items-center justify-center flex-shrink-0 shadow-md">
-                <User className="h-12 w-12 sm:h-14 sm:w-14 text-white" />
+              {/* Foto ahli gizi */}
+              <div className="h-28 w-28 sm:h-32 sm:w-32 rounded-2xl overflow-hidden flex-shrink-0 shadow-md bg-gradient-to-br from-green-200 to-emerald-300">
+                {NUTRITIONIST.foto ? (
+                  <img
+                    src={NUTRITIONIST.foto}
+                    alt={NUTRITIONIST.nama}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <User className="h-14 w-14 text-white" />
+                  </div>
+                )}
               </div>
               <div className="text-center sm:text-left flex-1">
                 <CardTitle className="text-xl sm:text-2xl text-gray-900">{NUTRITIONIST.nama}</CardTitle>

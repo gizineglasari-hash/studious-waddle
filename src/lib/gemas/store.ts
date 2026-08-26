@@ -10,7 +10,8 @@ export type ViewKey =
   | "makan-anak"
   | "video-edukasi"
   | "hubungi-ahli"
-  | "tentang";
+  | "tentang"
+  | "admin-analytics"; // hidden admin view (access via Ctrl+Shift+A or #admin-gemas-tersembunyi)
 
 export interface MeasurementRecord {
   id: string;

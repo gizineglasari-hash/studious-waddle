@@ -37,7 +37,7 @@ export const NUTRITIONIST: NutritionistInfo = {
   nama: "Surya Dewi Darajati, S.Gz.",
   gelar: "Ahli Gizi",
   peran: "Ahli Gizi UPTD Puskesmas Neglasari",
-  foto: "", // PLACEHOLDER - ganti dengan URL foto profesional
+  foto: "/images/ahli-gizi-surya-dewi.png",
   deskripsi:
     "Dapatkan informasi dan edukasi mengenai gizi anak, pemberian makan, MP-ASI, dan pemantauan pertumbuhan. Konsultasi tersedia pada hari kerja sesuai jam layanan Puskesmas.",
   whatsappNumber: "", // PLACEHOLDER - isi dengan nomor WhatsApp format 62xxx
