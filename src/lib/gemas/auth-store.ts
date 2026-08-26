@@ -1567,11 +1567,17 @@ export const useAuthStore = create<AuthState>()(
       // lives on the server). In localStorage mode we persist everything
       // (the original behavior).
       partialize: (state) => {
+        // Always save everything to localStorage
+        // This ensures data persists even when Supabase fails
         if (isSupabaseConfigured) {
           return {
             currentUserId: state.currentUserId,
             currentAdminId: state.currentAdminId,
             isAdmin: state.isAdmin,
+            users: state.users,
+            children: state.children,
+            consultations: state.consultations,
+            notifications: state.notifications,
           };
         }
         return {
