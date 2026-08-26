@@ -185,17 +185,7 @@ export function UserDashboardView() {
     }
   };
 
-  // Children
-  const [showChildForm, setShowChildForm] = useState(false);
-  const [childForm, setChildForm] = useState({
-    namaAnak: "",
-    tanggalLahir: "",
-    jenisKelamin: "L" as "L" | "P",
-    beratBadan: "",
-    tinggiBadan: "",
-  });
-  const [savingChild, setSavingChild] = useState(false);
-
+  // Children handlers
   const resetChildForm = () => {
     setChildForm({
       namaAnak: "",
@@ -271,11 +261,7 @@ export function UserDashboardView() {
   };
 
   // Notifications
-  const [showNotif, setShowNotif] = useState(false);
   const unreadCount = user ? getUnreadNotificationCount(user.id) : 0;
-  const notifications = useMemo(() => {
-    return user ? getNotificationsByUser(user.id) : [];
-  }, [user, getNotificationsByUser, unreadCount]);
 
   const handleOpenNotifs = () => {
     if (!showNotif && user && unreadCount > 0) {
