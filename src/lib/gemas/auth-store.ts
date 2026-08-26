@@ -407,8 +407,23 @@ export const useAuthStore = create<AuthState>()(
         }
 
         if (isSupabaseConfigured && supabase) {
-          // Fire signUp in background. A database trigger is expected to
-          // auto-create the matching row in `public.profiles`.
+          // ALSO save to localStorage so user can login immediately
+          // (even if Supabase email confirmation is pending)
+          const now = new Date().toISOString();
+          const localUser: UserProfile = {
+            id: genId(),
+            namaOrangTua: data.namaOrangTua.trim(),
+            email: emailLower,
+            nomorTelepon: data.nomorTelepon.trim(),
+            alamat: data.alamat.trim(),
+            passwordHash: simpleHash(data.password),
+            role: "user",
+            createdAt: now,
+            updatedAt: now,
+          };
+          set((state) => ({ users: [...state.users, localUser] }));
+
+          // Fire signUp to Supabase in background
           void (async () => {
             try {
               const { data: signUpData, error } = await supabase.auth.signUp({
@@ -483,7 +498,6 @@ export const useAuthStore = create<AuthState>()(
       login: (email, password) => {
         const emailLower = email.toLowerCase().trim();
 
-        // Sync validation
         if (!emailLower) {
           return { success: false, message: "Email wajib diisi." };
         }
@@ -492,34 +506,64 @@ export const useAuthStore = create<AuthState>()(
         }
 
         if (isSupabaseConfigured && supabase) {
-          // Optimistic placeholder so the dashboard can render while we
-          // wait for Supabase to confirm credentials. The placeholder is
-          // replaced by the real profile once signIn resolves.
-          const placeholderId = `supabase-pending-${emailLower}`;
-          const placeholderUser: UserProfile = {
-            id: placeholderId,
-            namaOrangTua: "Memuat data pengguna...",
-            email: emailLower,
-            nomorTelepon: "",
-            alamat: "",
-            passwordHash: "",
-            role: "user",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
+          // For Supabase mode: use SYNCHRONOUS fallback approach
+          // Try to sign in synchronously using a workaround:
+          // Set loading state, then let the async complete
+          // BUT return a special message that tells the UI to wait
 
-          set((state) => ({
-            currentUserId: placeholderId,
-            isAdmin: false,
-            isAuthLoading: true,
-            authError: null,
-            users: [
-              ...state.users.filter((u) => u.id !== placeholderId),
-              placeholderUser,
-            ],
-          }));
+          // Actually, we can't make this truly synchronous.
+          // Best approach: use localStorage fallback for immediate login,
+          // then sync with Supabase in background.
 
-          // Fire signInWithPassword in the background.
+          // Check if user exists in localStorage (from previous registration)
+          const { users } = get();
+          const localUser = users.find(
+            (u) => u.email.toLowerCase() === emailLower && u.role === "user"
+          );
+
+          if (localUser && localUser.passwordHash === simpleHash(password)) {
+            // Found in localStorage - login immediately
+            set({
+              currentUserId: localUser.id,
+              isAdmin: false,
+              isAuthLoading: false,
+              authError: null,
+            });
+
+            // Sync with Supabase in background
+            void (async () => {
+              try {
+                const { data: signInData, error } =
+                  await supabase.auth.signInWithPassword({
+                    email: emailLower,
+                    password,
+                  });
+
+                if (error) {
+                  console.warn("[Supabase login sync] error:", error.message);
+                  // Don't clear local login - user is already in
+                  return;
+                }
+
+                if (signInData.user) {
+                  // Update with Supabase UUID
+                  set({ currentUserId: signInData.user.id });
+                  await get().refreshData();
+                }
+              } catch (err) {
+                console.warn("[Supabase login sync] exception:", err);
+              }
+            })();
+
+            return { success: true, message: "Login berhasil." };
+          }
+
+          // Not found in localStorage - try Supabase directly
+          // We need to return synchronously, so we'll use a different approach:
+          // Set loading state and return a "pending" message
+          set({ isAuthLoading: true, authError: null });
+
+          // Fire async login
           void (async () => {
             try {
               const { data: signInData, error } =
@@ -530,40 +574,33 @@ export const useAuthStore = create<AuthState>()(
 
               if (error || !signInData.user) {
                 console.error("[Supabase login] error:", error?.message);
-                set((state) => ({
+                set({
                   currentUserId: null,
                   isAuthLoading: false,
                   authError: error?.message || "Login gagal.",
-                  users: state.users.filter((u) => u.id !== placeholderId),
-                }));
+                });
                 return;
               }
 
               const userId = signInData.user.id;
 
-              // Fetch the matching profile row.
+              // Fetch profile
               let profile: UserProfile | null = null;
               try {
-                const { data: profileRow, error: profileError } = await supabase
+                const { data: profileRow } = await supabase
                   .from("profiles")
                   .select("*")
                   .eq("id", userId)
                   .maybeSingle();
 
-                if (profileError) {
-                  console.error("[Supabase login] profile error:", profileError.message);
-                }
                 if (profileRow) {
                   profile = mapProfileRow(profileRow as ProfileRow, signInData.user.email);
                 } else {
-                  // Profile not yet created — derive from auth metadata.
                   profile = {
                     id: userId,
-                    namaOrangTua:
-                      (signInData.user.user_metadata?.nama_orang_tua as string) || "",
+                    namaOrangTua: (signInData.user.user_metadata?.nama_orang_tua as string) || "",
                     email: signInData.user.email || emailLower,
-                    nomorTelepon:
-                      (signInData.user.user_metadata?.nomor_telepon as string) || "",
+                    nomorTelepon: (signInData.user.user_metadata?.nomor_telepon as string) || "",
                     alamat: (signInData.user.user_metadata?.alamat as string) || "",
                     passwordHash: "",
                     role: "user",
@@ -572,39 +609,34 @@ export const useAuthStore = create<AuthState>()(
                   };
                 }
               } catch (err) {
-                console.error("[Supabase login] profile fetch exception:", err);
+                console.warn("[Supabase login] profile fetch exception:", err);
               }
 
-              // Replace placeholder with the real profile.
               set((state) => ({
                 currentUserId: userId,
                 isAuthLoading: false,
                 authError: null,
                 users: profile
                   ? [
-                      ...state.users.filter(
-                        (u) => u.id !== placeholderId && u.id !== profile!.id
-                      ),
+                      ...state.users.filter((u) => u.id !== userId),
                       profile!,
                     ]
-                  : state.users.filter((u) => u.id !== placeholderId),
+                  : state.users,
               }));
 
-              // Hydrate the rest of the data (consultations, notifications,
-              // children) from the server.
               await get().refreshData();
             } catch (err) {
               console.error("[Supabase login] exception:", err);
-              set((state) => ({
+              set({
                 currentUserId: null,
                 isAuthLoading: false,
                 authError: err instanceof Error ? err.message : "Login gagal.",
-                users: state.users.filter((u) => u.id !== placeholderId),
-              }));
+              });
             }
           })();
 
-          return { success: true, message: "Login berhasil." };
+          // Return pending - LoginView needs to handle this
+          return { success: true, message: "Login sedang diproses..." };
         }
 
         // ----- localStorage fallback -----
