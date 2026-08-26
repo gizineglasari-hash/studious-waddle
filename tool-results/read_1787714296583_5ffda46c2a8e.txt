@@ -1,0 +1,669 @@
+     1→"use client";
+     2→
+     3→import { useState, useEffect } from "react";
+     4→import {
+     5→  BarChart3,
+     6→  Users,
+     7→  Eye,
+     8→  Globe,
+     9→  Monitor,
+    10→  Smartphone,
+    11→  Link as LinkIcon,
+    12→  MapPin,
+    13→  Activity,
+    14→  Lock,
+    15→  LogOut,
+    16→  ExternalLink,
+    17→  TrendingUp,
+    18→  Clock,
+    19→  RefreshCw,
+    20→  Hash,
+    21→} from "lucide-react";
+    22→import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+    23→import { Badge } from "@/components/ui/badge";
+    24→import { Button } from "@/components/ui/button";
+    25→import { Input } from "@/components/ui/input";
+    26→import { Label } from "@/components/ui/label";
+    27→import { useToast } from "@/hooks/use-toast";
+    28→import { useGemasStore } from "@/lib/gemas/store";
+    29→
+    30→// Admin password - bisa diubah di sini
+    31→// Default: gemas2026
+    32→const ADMIN_PASSWORD = "gemas2026";
+    33→
+    34→// Vercel Analytics dashboard URL
+    35→const VERCEL_ANALYTICS_URL =
+    36→  "https://vercel.com/rahmadianiputribaiquni-3969/gemas-puskesmas-neglasari/analytics";
+    37→
+    38→interface VisitStats {
+    39→  totalVisits: number;
+    40→  uniqueDays: Set<string>;
+    41→  firstVisit: string;
+    42→  lastVisit: string;
+    43→  visitsByPage: Record<string, number>;
+    44→  visitsByBrowser: Record<string, number>;
+    45→  visitsByDevice: Record<string, number>;
+    46→  visitHistory: { timestamp: string; page: string; userAgent: string }[];
+    47→}
+    48→
+    49→interface RealTimeInfo {
+    50→  ip: string;
+    51→  city: string;
+    52→  region: string;
+    53→  country: string;
+    54→  timezone: string;
+    55→  isp: string;
+    56→  browser: string;
+    57→  os: string;
+    58→  device: string;
+    59→  screenSize: string;
+    60→  language: string;
+    61→}
+    62→
+    63→function getBrowserInfo(): Partial<RealTimeInfo> {
+    64→  if (typeof navigator === "undefined") return {};
+    65→  const ua = navigator.userAgent;
+    66→  let browser = "Unknown";
+    67→  let os = "Unknown";
+    68→  let device = "Desktop";
+    69→
+    70→  // Detect browser
+    71→  if (ua.includes("Edg/")) browser = "Microsoft Edge";
+    72→  else if (ua.includes("Chrome/")) browser = "Google Chrome";
+    73→  else if (ua.includes("Firefox/")) browser = "Mozilla Firefox";
+    74→  else if (ua.includes("Safari/")) browser = "Apple Safari";
+    75→  else if (ua.includes("Opera/") || ua.includes("OPR/")) browser = "Opera";
+    76→
+    77→  // Detect OS
+    78→  if (ua.includes("Windows")) os = "Windows";
+    79→  else if (ua.includes("Mac OS")) os = "macOS";
+    80→  else if (ua.includes("Android")) os = "Android";
+    81→  else if (ua.includes("iOS") || ua.includes("iPhone") || ua.includes("iPad")) os = "iOS";
+    82→  else if (ua.includes("Linux")) os = "Linux";
+    83→
+    84→  // Detect device
+    85→  if (/Mobi|Android/i.test(ua)) device = "Mobile";
+    86→  else if (/iPad|Tablet/i.test(ua)) device = "Tablet";
+    87→
+    88→  return {
+    89→    browser,
+    90→    os,
+    91→    device,
+    92→    screenSize: `${window.screen.width}x${window.screen.height}`,
+    93→    language: navigator.language,
+    94→  };
+    95→}
+    96→
+    97→async function fetchIpInfo(): Promise<Partial<RealTimeInfo>> {
+    98→  try {
+    99→    const response = await fetch("https://ipapi.co/json/");
+   100→    if (response.ok) {
+   101→      const data = await response.json();
+   102→      return {
+   103→        ip: data.ip || "Unknown",
+   104→        city: data.city || "Unknown",
+   105→        region: data.region || "Unknown",
+   106→        country: data.country_name || "Unknown",
+   107→        timezone: data.timezone || "Unknown",
+   108→        isp: data.org || "Unknown",
+   109→      };
+   110→    }
+   111→  } catch (e) {
+   112→    // Fallback if API fails
+   113→  }
+   114→  return { ip: "Unknown", city: "Unknown", country: "Unknown" };
+   115→}
+   116→
+   117→function loadVisitStats(): VisitStats {
+   118→  if (typeof localStorage === "undefined") {
+   119→    return {
+   120→      totalVisits: 0,
+   121→      uniqueDays: new Set(),
+   122→      firstVisit: "",
+   123→      lastVisit: "",
+   124→      visitsByPage: {},
+   125→      visitsByBrowser: {},
+   126→      visitsByDevice: {},
+   127→      visitHistory: [],
+   128→    };
+   129→  }
+   130→  try {
+   131→    const stored = localStorage.getItem("gemas-analytics-stats");
+   132→    if (stored) {
+   133→      const data = JSON.parse(stored);
+   134→      return {
+   135→        totalVisits: data.totalVisits || 0,
+   136→        uniqueDays: new Set(data.uniqueDays || []),
+   137→        firstVisit: data.firstVisit || "",
+   138→        lastVisit: data.lastVisit || "",
+   139→        visitsByPage: data.visitsByPage || {},
+   140→        visitsByBrowser: data.visitsByBrowser || {},
+   141→        visitsByDevice: data.visitsByDevice || {},
+   142→        visitHistory: data.visitHistory || [],
+   143→      };
+   144→    }
+   145→  } catch (e) {
+   146→    // ignore parse errors
+   147→  }
+   148→  return {
+   149→    totalVisits: 0,
+   150→    uniqueDays: new Set(),
+   151→    firstVisit: "",
+   152→    lastVisit: "",
+   153→    visitsByPage: {},
+   154→    visitsByBrowser: {},
+   155→    visitsByDevice: {},
+   156→    visitHistory: [],
+   157→  };
+   158→}
+   159→
+   160→function saveVisitStats(stats: VisitStats) {
+   161→  if (typeof localStorage === "undefined") return;
+   162→  try {
+   163→    const data = {
+   164→      totalVisits: stats.totalVisits,
+   165→      uniqueDays: Array.from(stats.uniqueDays),
+   166→      firstVisit: stats.firstVisit,
+   167→      lastVisit: stats.lastVisit,
+   168→      visitsByPage: stats.visitsByPage,
+   169→      visitsByBrowser: stats.visitsByBrowser,
+   170→      visitsByDevice: stats.visitsByDevice,
+   171→      visitHistory: stats.visitHistory.slice(-50), // keep last 50
+   172→    };
+   173→    localStorage.setItem("gemas-analytics-stats", JSON.stringify(data));
+   174→  } catch (e) {
+   175→    // ignore
+   176→  }
+   177→}
+   178→
+   179→export function AdminAnalyticsView() {
+   180→  const { toast } = useToast();
+   181→  const { setView } = useGemasStore();
+   182→  const [authenticated, setAuthenticated] = useState(false);
+   183→  const [password, setPassword] = useState("");
+   184→  const [realTimeInfo, setRealTimeInfo] = useState<RealTimeInfo | null>(null);
+   185→  const [stats, setStats] = useState<VisitStats | null>(null);
+   186→  const [loading, setLoading] = useState(false);
+   187→
+   188→  // Initialize stats from localStorage on mount (no setState in effect)
+   189→  const [statsLoaded, setStatsLoaded] = useState(false);
+   190→  if (!statsLoaded && typeof window !== "undefined") {
+   191→    setStatsLoaded(true);
+   192→    const loaded = loadVisitStats();
+   193→    setStats(loaded);
+   194→  }
+   195→
+   196→  // Load visit stats and fetch real-time info when authenticated
+   197→  useEffect(() => {
+   198→    if (!authenticated) return;
+   199→
+   200→    let cancelled = false;
+   201→    const browserInfo = getBrowserInfo();
+   202→
+   203→    // Fetch real-time info async, then update state in callback (not in effect body)
+   204→    fetchIpInfo().then((ipInfo) => {
+   205→      if (cancelled) return;
+   206→      setRealTimeInfo({ ...browserInfo, ...ipInfo } as RealTimeInfo);
+   207→    });
+   208→
+   209→    return () => {
+   210→      cancelled = true;
+   211→    };
+   212→  }, [authenticated]);
+   213→
+   214→  const handleLogin = () => {
+   215→    if (password === ADMIN_PASSWORD) {
+   216→      setAuthenticated(true);
+   217→      toast({
+   218→        title: "Akses diterima",
+   219→        description: "Selamat datang di Dashboard Admin GEMAS",
+   220→      });
+   221→    } else {
+   222→      toast({
+   223→        title: "Password salah",
+   224→        description: "Silakan coba lagi.",
+   225→        variant: "destructive",
+   226→      });
+   227→    }
+   228→  };
+   229→
+   230→  const handleLogout = () => {
+   231→    setAuthenticated(false);
+   232→    setPassword("");
+   233→    setView("home");
+   234→  };
+   235→
+   236→  const handleRefresh = () => {
+   237→    const loaded = loadVisitStats();
+   238→    setStats(loaded);
+   239→    toast({
+   240→      title: "Data diperbarui",
+   241→      description: "Statistik kunjungan telah dimuat ulang.",
+   242→    });
+   243→  };
+   244→
+   245→  // ============ LOGIN VIEW ============
+   246→  if (!authenticated) {
+   247→    return (
+   248→      <div className="animate-fade-in min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 px-4">
+   249→        <Card className="w-full max-w-md border-0 shadow-2xl rounded-2xl bg-white">
+   250→          <CardHeader className="bg-gradient-to-br from-green-50 to-emerald-50 pb-3 text-center">
+   251→            <div className="mx-auto h-16 w-16 rounded-2xl bg-gradient-to-br from-green-600 to-emerald-700 flex items-center justify-center shadow-lg mb-3">
+   252→              <Lock className="h-8 w-8 text-white" />
+   253→            </div>
+   254→            <CardTitle className="text-xl text-gray-900">Halaman Admin GEMAS</CardTitle>
+   255→            <p className="text-xs text-gray-500 mt-1">
+   256→              Area terbatas - hanya untuk administrator
+   257→            </p>
+   258→          </CardHeader>
+   259→          <CardContent className="pt-5 space-y-4">
+   260→            <div>
+   261→              <Label htmlFor="password" className="text-xs font-medium mb-1.5 block">
+   262→                Password Admin
+   263→              </Label>
+   264→              <Input
+   265→                id="password"
+   266→                type="password"
+   267→                placeholder="Masukkan password admin"
+   268→                value={password}
+   269→                onChange={(e) => setPassword(e.target.value)}
+   270→                onKeyDown={(e) => {
+   271→                  if (e.key === "Enter") handleLogin();
+   272→                }}
+   273→                className="rounded-lg"
+   274→              />
+   275→            </div>
+   276→            <Button
+   277→              onClick={handleLogin}
+   278→              className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-full"
+   279→            >
+   280→              <Lock className="h-4 w-4 mr-2" />
+   281→              Masuk
+   282→            </Button>
+   283→            <Button
+   284→              onClick={() => setView("home")}
+   285→              variant="outline"
+   286→              className="w-full rounded-full"
+   287→            >
+   288→              Kembali ke Beranda
+   289→            </Button>
+   290→            <div className="text-center text-xs text-gray-400 pt-2 border-t border-gray-100">
+   291→              <p>Default password: <code className="bg-gray-100 px-1 rounded text-green-700">gemas2026</code></p>
+   292→              <p className="mt-1">Ganti password di <code className="bg-gray-100 px-1 rounded">AdminAnalyticsView.tsx</code></p>
+   293→            </div>
+   294→          </CardContent>
+   295→        </Card>
+   296→      </div>
+   297→    );
+   298→  }
+   299→
+   300→  // ============ DASHBOARD VIEW ============
+   301→  if (!stats || !realTimeInfo) {
+   302→    return (
+   303→      <div className="animate-fade-in min-h-screen flex items-center justify-center">
+   304→        <div className="text-center">
+   305→          <RefreshCw className="h-8 w-8 text-green-600 mx-auto mb-2 animate-spin" />
+   306→          <p className="text-sm text-gray-600">Memuat data analytics...</p>
+   307→        </div>
+   308→      </div>
+   309→    );
+   310→  }
+   311→
+   312→  const sortedPages = Object.entries(stats.visitsByPage).sort((a, b) => b[1] - a[1]);
+   313→  const sortedBrowsers = Object.entries(stats.visitsByBrowser).sort((a, b) => b[1] - a[1]);
+   314→  const sortedDevices = Object.entries(stats.visitsByDevice).sort((a, b) => b[1] - a[1]);
+   315→  const sortedHistory = [...stats.visitHistory].reverse().slice(0, 10);
+   316→
+   317→  return (
+   318→    <div className="animate-fade-in min-h-screen bg-gradient-to-br from-gray-50 to-green-50/30">
+   319→      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
+   320→        {/* Header */}
+   321→        <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+   322→          <div>
+   323→            <Badge variant="secondary" className="mb-2 bg-red-50 text-red-700 border-red-200 rounded-full">
+   324→              <Lock className="h-3 w-3 mr-1" />
+   325→              Admin Dashboard
+   326→            </Badge>
+   327→            <h1 className="font-heading text-2xl sm:text-3xl font-extrabold text-gray-900">
+   328→              Analytics GEMAS
+   329→            </h1>
+   330→            <p className="text-sm text-gray-600 mt-1">
+   331→              Pantau pengunjung dan statistik website GEMAS
+   332→            </p>
+   333→          </div>
+   334→          <div className="flex gap-2">
+   335→            <Button
+   336→              onClick={handleRefresh}
+   337→              variant="outline"
+   338→              size="sm"
+   339→              className="rounded-full"
+   340→            >
+   341→              <RefreshCw className="h-4 w-4 mr-1" />
+   342→              Refresh
+   343→            </Button>
+   344→            <Button
+   345→              onClick={handleLogout}
+   346→              variant="outline"
+   347→              size="sm"
+   348→              className="rounded-full border-red-300 text-red-700 hover:bg-red-50"
+   349→            >
+   350→              <LogOut className="h-4 w-4 mr-1" />
+   351→              Keluar
+   352→            </Button>
+   353→          </div>
+   354→        </div>
+   355→
+   356→        {/* Vercel Analytics Banner */}
+   357→        <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-sky-50 rounded-2xl mb-6 overflow-hidden">
+   358→          <CardContent className="pt-5 pb-5">
+   359→            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+   360→              <div className="h-12 w-12 rounded-xl bg-white flex items-center justify-center flex-shrink-0 shadow-md">
+   361→                <BarChart3 className="h-6 w-6 text-blue-600" />
+   362→              </div>
+   363→              <div className="flex-1">
+   364→                <h3 className="font-heading text-base font-bold text-gray-900 mb-1">
+   365→                  Vercel Analytics Dashboard (Statistik Lengkap)
+   366→                </h3>
+   367→                <p className="text-xs text-gray-600 leading-relaxed">
+   368→                  Untuk melihat statistik lengkap (Total Page Views, Total Visitors, Top Pages, Top Referrers, Top Countries, Top Browsers, Top Devices, Top Paths), buka Vercel Analytics Dashboard. Login dengan akun Vercel Anda.
+   369→                </p>
+   370→              </div>
+   371→              <Button
+   372→                asChild
+   373→                className="bg-blue-600 hover:bg-blue-700 text-white rounded-full flex-shrink-0"
+   374→              >
+   375→                <a href={VERCEL_ANALYTICS_URL} target="_blank" rel="noopener noreferrer">
+   376→                  <ExternalLink className="h-4 w-4 mr-1" />
+   377→                  Buka Dashboard
+   378→                </a>
+   379→              </Button>
+   380→            </div>
+   381→          </CardContent>
+   382→        </Card>
+   383→
+   384→        {/* Stats Cards - Total */}
+   385→        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+   386→          <Card className="border-0 shadow-md rounded-2xl overflow-hidden">
+   387→            <CardContent className="pt-5 pb-4">
+   388→              <div className="flex items-center gap-2 mb-2">
+   389→                <div className="h-9 w-9 rounded-lg bg-blue-100 flex items-center justify-center">
+   390→                  <Eye className="h-5 w-5 text-blue-600" />
+   391→                </div>
+   392→                <span className="text-xs font-medium text-gray-500">Total Visits</span>
+   393→              </div>
+   394→              <div className="text-2xl font-extrabold text-gray-900">{stats.totalVisits}</div>
+   395→              <p className="text-[10px] text-gray-500 mt-1">Device ini</p>
+   396→            </CardContent>
+   397→          </Card>
+   398→
+   399→          <Card className="border-0 shadow-md rounded-2xl overflow-hidden">
+   400→            <CardContent className="pt-5 pb-4">
+   401→              <div className="flex items-center gap-2 mb-2">
+   402→                <div className="h-9 w-9 rounded-lg bg-green-100 flex items-center justify-center">
+   403→                  <Calendar className="h-5 w-5 text-green-600" />
+   404→                </div>
+   405→                <span className="text-xs font-medium text-gray-500">Hari Aktif</span>
+   406→              </div>
+   407→              <div className="text-2xl font-extrabold text-gray-900">{stats.uniqueDays.size}</div>
+   408→              <p className="text-[10px] text-gray-500 mt-1">Hari berbeda</p>
+   409→            </CardContent>
+   410→          </Card>
+   411→
+   412→          <Card className="border-0 shadow-md rounded-2xl overflow-hidden">
+   413→            <CardContent className="pt-5 pb-4">
+   414→              <div className="flex items-center gap-2 mb-2">
+   415→                <div className="h-9 w-9 rounded-lg bg-amber-100 flex items-center justify-center">
+   416→                  <Hash className="h-5 w-5 text-amber-600" />
+   417→                </div>
+   418→                <span className="text-xs font-medium text-gray-500">Halaman Dilihat</span>
+   419→              </div>
+   420→              <div className="text-2xl font-extrabold text-gray-900">{sortedPages.length}</div>
+   421→              <p className="text-[10px] text-gray-500 mt-1">Halaman unik</p>
+   422→            </CardContent>
+   423→          </Card>
+   424→
+   425→          <Card className="border-0 shadow-md rounded-2xl overflow-hidden">
+   426→            <CardContent className="pt-5 pb-4">
+   427→              <div className="flex items-center gap-2 mb-2">
+   428→                <div className="h-9 w-9 rounded-lg bg-purple-100 flex items-center justify-center">
+   429→                  <Clock className="h-5 w-5 text-purple-600" />
+   430→                </div>
+   431→                <span className="text-xs font-medium text-gray-500">Kunjungan Akhir</span>
+   432→              </div>
+   433→              <div className="text-sm font-bold text-gray-900">
+   434→                {stats.lastVisit ? new Date(stats.lastVisit).toLocaleDateString("id-ID", { day: "2-digit", month: "short" }) : "—"}
+   435→              </div>
+   436→              <p className="text-[10px] text-gray-500 mt-1">
+   437→                {stats.lastVisit ? new Date(stats.lastVisit).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : ""}
+   438→              </p>
+   439→            </CardContent>
+   440→          </Card>
+   441→        </div>
+   442→
+   443→        {/* Real-time Visitor Info */}
+   444→        <Card className="border-0 shadow-lg rounded-2xl mb-6 overflow-hidden">
+   445→          <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 pb-3">
+   446→            <CardTitle className="text-lg flex items-center gap-2">
+   447→              <Activity className="h-5 w-5 text-green-600" />
+   448→              Informasi Pengunjung Saat Ini
+   449→            </CardTitle>
+   450→          </CardHeader>
+   451→          <CardContent className="pt-5">
+   452→            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+   453→              <InfoItem
+   454→                icon={MapPin}
+   455→                label="Lokasi"
+   456→                value={realTimeInfo.city && realTimeInfo.city !== "Unknown"
+   457→                  ? `${realTimeInfo.city}, ${realTimeInfo.country}`
+   458→                  : realTimeInfo.country || "Unknown"}
+   459→                color="bg-rose-100 text-rose-600"
+   460→              />
+   461→              <InfoItem
+   462→                icon={Globe}
+   463→                label="IP Address"
+   464→                value={realTimeInfo.ip || "Unknown"}
+   465→                color="bg-blue-100 text-blue-600"
+   466→              />
+   467→              <InfoItem
+   468→                icon={Monitor}
+   469→                label="Browser"
+   470→                value={realTimeInfo.browser || "Unknown"}
+   471→                color="bg-purple-100 text-purple-600"
+   472→              />
+   473→              <InfoItem
+   474→                icon={Smartphone}
+   475→                label="Device"
+   476→                value={`${realTimeInfo.device} (${realTimeInfo.os})`}
+   477→                color="bg-amber-100 text-amber-600"
+   478→              />
+   479→              <InfoItem
+   480→                icon={Activity}
+   481→                label="Screen"
+   482→                value={realTimeInfo.screenSize || "Unknown"}
+   483→                color="bg-emerald-100 text-emerald-600"
+   484→              />
+   485→              <InfoItem
+   486→                icon={Globe}
+   487→                label="Bahasa"
+   488→                value={realTimeInfo.language || "Unknown"}
+   489→                color="bg-sky-100 text-sky-600"
+   490→              />
+   491→              <InfoItem
+   492→                icon={Clock}
+   493→                label="Zona Waktu"
+   494→                value={realTimeInfo.timezone || "Unknown"}
+   495→                color="bg-indigo-100 text-indigo-600"
+   496→              />
+   497→              <InfoItem
+   498→                icon={LinkIcon}
+   499→                label="ISP"
+   500→                value={(realTimeInfo.isp || "Unknown").substring(0, 30)}
+   501→                color="bg-teal-100 text-teal-600"
+   502→              />
+   503→            </div>
+   504→          </CardContent>
+   505→        </Card>
+   506→
+   507→        {/* Top Pages */}
+   508→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+   509→          <Card className="border-0 shadow-md rounded-2xl overflow-hidden">
+   510→            <CardHeader className="bg-gradient-to-r from-blue-50 to-sky-50 pb-3">
+   511→              <CardTitle className="text-base flex items-center gap-2">
+   512→                <Hash className="h-4 w-4 text-blue-600" />
+   513→                Top Pages (Halaman Populer)
+   514→              </CardTitle>
+   515→            </CardHeader>
+   516→            <CardContent className="pt-4">
+   517→              {sortedPages.length > 0 ? (
+   518→                <div className="space-y-2">
+   519→                  {sortedPages.slice(0, 8).map(([page, count], i) => (
+   520→                    <div key={page} className="flex items-center justify-between p-2 rounded-lg bg-gray-50">
+   521→                      <div className="flex items-center gap-2 min-w-0">
+   522→                        <span className="text-xs font-bold text-gray-400 w-5">{i + 1}.</span>
+   523→                        <span className="text-sm text-gray-700 truncate">{page}</span>
+   524→                      </div>
+   525→                      <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs flex-shrink-0">
+   526→                        {count}x
+   527→                      </Badge>
+   528→                    </div>
+   529→                  ))}
+   530→                </div>
+   531→              ) : (
+   532→                <p className="text-sm text-gray-500 text-center py-4">Belum ada data</p>
+   533→              )}
+   534→            </CardContent>
+   535→          </Card>
+   536→
+   537→          <Card className="border-0 shadow-md rounded-2xl overflow-hidden">
+   538→            <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 pb-3">
+   539→              <CardTitle className="text-base flex items-center gap-2">
+   540→                <Monitor className="h-4 w-4 text-purple-600" />
+   541→                Top Browsers
+   542→              </CardTitle>
+   543→            </CardHeader>
+   544→            <CardContent className="pt-4">
+   545→              {sortedBrowsers.length > 0 ? (
+   546→                <div className="space-y-2">
+   547→                  {sortedBrowsers.slice(0, 6).map(([browser, count], i) => (
+   548→                    <div key={browser} className="flex items-center justify-between p-2 rounded-lg bg-gray-50">
+   549→                      <div className="flex items-center gap-2 min-w-0">
+   550→                        <span className="text-xs font-bold text-gray-400 w-5">{i + 1}.</span>
+   551→                        <span className="text-sm text-gray-700 truncate">{browser}</span>
+   552→                      </div>
+   553→                      <Badge variant="secondary" className="bg-purple-100 text-purple-700 text-xs flex-shrink-0">
+   554→                        {count}x
+   555→                      </Badge>
+   556→                    </div>
+   557→                  ))}
+   558→                </div>
+   559→              ) : (
+   560→                <p className="text-sm text-gray-500 text-center py-4">Belum ada data</p>
+   561→              )}
+   562→            </CardContent>
+   563→          </Card>
+   564→        </div>
+   565→
+   566→        {/* Top Devices & Recent Visits */}
+   567→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+   568→          <Card className="border-0 shadow-md rounded-2xl overflow-hidden">
+   569→            <CardHeader className="bg-gradient-to-r from-amber-50 to-yellow-50 pb-3">
+   570→              <CardTitle className="text-base flex items-center gap-2">
+   571→                <Smartphone className="h-4 w-4 text-amber-600" />
+   572→                Top Devices
+   573→              </CardTitle>
+   574→            </CardHeader>
+   575→            <CardContent className="pt-4">
+   576→              {sortedDevices.length > 0 ? (
+   577→                <div className="space-y-2">
+   578→                  {sortedDevices.slice(0, 4).map(([device, count], i) => (
+   579→                    <div key={device} className="flex items-center justify-between p-2 rounded-lg bg-gray-50">
+   580→                      <div className="flex items-center gap-2 min-w-0">
+   581→                        <span className="text-xs font-bold text-gray-400 w-5">{i + 1}.</span>
+   582→                        <span className="text-sm text-gray-700 truncate">{device}</span>
+   583→                      </div>
+   584→                      <Badge variant="secondary" className="bg-amber-100 text-amber-700 text-xs flex-shrink-0">
+   585→                        {count}x
+   586→                      </Badge>
+   587→                    </div>
+   588→                  ))}
+   589→                </div>
+   590→              ) : (
+   591→                <p className="text-sm text-gray-500 text-center py-4">Belum ada data</p>
+   592→              )}
+   593→            </CardContent>
+   594→          </Card>
+   595→
+   596→          <Card className="border-0 shadow-md rounded-2xl overflow-hidden">
+   597→            <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 pb-3">
+   598→              <CardTitle className="text-base flex items-center gap-2">
+   599→                <Clock className="h-4 w-4 text-green-600" />
+   600→                Kunjungan Terakhir
+   601→              </CardTitle>
+   602→            </CardHeader>
+   603→            <CardContent className="pt-4">
+   604→              {sortedHistory.length > 0 ? (
+   605→                <div className="space-y-1.5 max-h-72 overflow-y-auto">
+   606→                  {sortedHistory.map((visit, i) => (
+   607→                    <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-gray-50 text-xs">
+   608→                      <span className="text-gray-700 truncate flex-1">{visit.page}</span>
+   609→                      <span className="text-gray-500 ml-2 flex-shrink-0">
+   610→                        {new Date(visit.timestamp).toLocaleString("id-ID", {
+   611→                          day: "2-digit",
+   612→                          month: "short",
+   613→                          hour: "2-digit",
+   614→                          minute: "2-digit",
+   615→                        })}
+   616→                      </span>
+   617→                    </div>
+   618→                  ))}
+   619→                </div>
+   620→              ) : (
+   621→                <p className="text-sm text-gray-500 text-center py-4">Belum ada data</p>
+   622→              )}
+   623→            </CardContent>
+   624→          </Card>
+   625→        </div>
+   626→
+   627→        {/* Footer Info */}
+   628→        <Card className="border-2 border-amber-200 bg-amber-50/50 rounded-2xl">
+   629→          <CardContent className="pt-4 pb-4">
+   630→            <div className="flex items-start gap-2">
+   631→              <TrendingUp className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+   632→              <div className="text-xs text-amber-800 leading-relaxed">
+   633→                <strong>Catatan:</strong> Statistik di halaman ini hanya mencatat kunjungan dari perangkat ini (localStorage). Untuk statistik lengkap semua pengunjung website, gunakan <strong>Vercel Analytics Dashboard</strong> yang link-nya tersedia di atas. Data Vercel Analytics mencakup: Total Page Views, Total Visitors, Top Pages, Top Referrers, Top Countries, Top Browsers, Top Devices, dan Top Paths dari semua pengunjung.
+   634→              </div>
+   635→            </div>
+   636→          </CardContent>
+   637→        </Card>
+   638→      </div>
+   639→    </div>
+   640→  );
+   641→}
+   642→
+   643→function InfoItem({
+   644→  icon: Icon,
+   645→  label,
+   646→  value,
+   647→  color,
+   648→}: {
+   649→  icon: React.ElementType;
+   650→  label: string;
+   651→  value: string;
+   652→  color: string;
+   653→}) {
+   654→  return (
+   655→    <div className="flex items-start gap-2 p-2.5 rounded-lg bg-gray-50">
+   656→      <div className={`h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 ${color}`}>
+   657→        <Icon className="h-4 w-4" />
+   658→      </div>
+   659→      <div className="min-w-0">
+   660→        <div className="text-[10px] text-gray-500 font-medium">{label}</div>
+   661→        <div className="text-xs text-gray-900 font-semibold truncate">{value}</div>
+   662→      </div>
+   663→    </div>
+   664→  );
+   665→}
+   666→
+   667→// Import Calendar icon since we use it above
+   668→import { Calendar } from "lucide-react";
+   669→
