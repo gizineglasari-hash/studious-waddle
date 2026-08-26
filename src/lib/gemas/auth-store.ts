@@ -642,31 +642,82 @@ export const useAuthStore = create<AuthState>()(
         const isDefaultAdmin =
           emailLower === DEFAULT_ADMIN_EMAIL && password === DEFAULT_ADMIN_PASSWORD;
 
-        if (isSupabaseConfigured && supabase) {
-          // If using default admin credentials, sign in to Supabase too
-          // (assumes the default admin account exists in Supabase Auth).
-          if (isDefaultAdmin) {
+        if (isDefaultAdmin) {
+          // Default admin: set local state WITHOUT trying Supabase Auth
+          // (admin@gemas.id doesn't exist in Supabase Auth - it's a local admin)
+          const adminId = "admin-default";
+          const adminProfile: UserProfile = {
+            id: adminId,
+            namaOrangTua: "Administrator GEMAS",
+            email: emailLower,
+            nomorTelepon: "",
+            alamat: "",
+            passwordHash: simpleHash(password),
+            role: "admin",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+
+          set((state) => ({
+            users: [...state.users.filter((u) => u.id !== adminId), adminProfile],
+            currentAdminId: adminId,
+            isAdmin: true,
+            currentUserId: null,
+            authError: null,
+          }));
+
+          // Fetch consultations from Supabase if available
+          if (isSupabaseConfigured && supabase) {
             void (async () => {
               try {
-                const { error } = await supabase.auth.signInWithPassword({
-                  email: emailLower,
-                  password,
-                });
-                if (error) {
-                  console.error("[Supabase adminLogin] error:", error.message);
-                }
+                await get().refreshData();
               } catch (err) {
-                console.error("[Supabase adminLogin] exception:", err);
+                console.error("[adminLogin] refreshData exception:", err);
               }
             })();
           }
 
-          // Ensure an admin profile exists locally for the dashboard.
+          return { success: true, message: "Login admin berhasil." };
+        }
+
+        // Non-default admin: try Supabase Auth if configured
+        if (isSupabaseConfigured && supabase) {
+          void (async () => {
+            try {
+              const { data: signInData, error } = await supabase.auth.signInWithPassword({
+                email: emailLower,
+                password,
+              });
+              if (error) {
+                console.error("[Supabase adminLogin] error:", error.message);
+                return;
+              }
+              if (signInData.user) {
+                const { data: profile } = await supabase
+                  .from("profiles")
+                  .select("*")
+                  .eq("id", signInData.user.id)
+                  .maybeSingle();
+
+                if (profile && profile.role === "admin") {
+                  set({
+                    currentAdminId: signInData.user.id,
+                    isAdmin: true,
+                    currentUserId: null,
+                  });
+                  await get().refreshData();
+                }
+              }
+            } catch (err) {
+              console.error("[Supabase adminLogin] exception:", err);
+            }
+          })();
+
           const { users } = get();
           let admin = users.find((u) => u.email.toLowerCase() === emailLower);
           if (!admin) {
             admin = {
-              id: isDefaultAdmin ? "admin-default" : genId(),
+              id: genId(),
               namaOrangTua: "Administrator GEMAS",
               email: emailLower,
               nomorTelepon: "",
@@ -677,15 +728,6 @@ export const useAuthStore = create<AuthState>()(
               updatedAt: new Date().toISOString(),
             };
             set((state) => ({ users: [...state.users, admin!] }));
-          } else if (admin.role !== "admin") {
-            // Promote existing user to admin locally.
-            set((state) => ({
-              users: state.users.map((u) =>
-                u.id === admin!.id
-                  ? { ...u, role: "admin", updatedAt: new Date().toISOString() }
-                  : u
-              ),
-            }));
           }
 
           set({
