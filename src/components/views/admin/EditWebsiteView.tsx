@@ -11,7 +11,7 @@ import {
   FileVideo,
   FileImage,
   FileText,
-  FileArticle,
+  Newspaper,
   LayoutGrid,
   Search,
   X,
@@ -151,7 +151,7 @@ function getContentTypeIcon(
     case "pdf":
       return FileText;
     case "article":
-      return FileArticle;
+      return Newspaper;
     case "banner":
       return LayoutGrid;
     default:
