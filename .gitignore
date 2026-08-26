@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -52,3 +53,40 @@ prompt
 server.log
 # Skills directory
 /skills/
+# === Deployment cleanup ===
+# Environment files (sensitive)
+.env
+.env.local
+.env.development
+.env.production
+
+# Database files
+db/
+*.db
+*.sqlite
+*.sqlite3
+
+# Download folder (screenshots, test outputs)
+download/
+
+# Dev environment scripts
+.zscripts/
+
+# Mini-services (not used in GEMAS)
+mini-services/
+examples/
+
+# Logs
+*.log
+dev.log
+server.log
+
+# Skills directory
+/skills/
+
+# Vercel
+.vercel
+
+# Build outputs
+build/
+out/
