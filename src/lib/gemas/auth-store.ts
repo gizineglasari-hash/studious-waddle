@@ -337,6 +337,10 @@ interface AuthState {
   markNotificationRead: (notificationId: string) => void;
   markAllNotificationsRead: (userId: string) => void;
 
+  // Delete actions (admin)
+  deleteUser: (userId: string) => { success: boolean; message: string };
+  deleteConsultation: (consultationId: string) => { success: boolean; message: string };
+
   // Stats (for admin)
   getStats: () => {
     totalConsultations: number;
@@ -1265,6 +1269,51 @@ export const useAuthStore = create<AuthState>()(
             }
           })();
         }
+      },
+
+      // ============ DELETE ACTIONS ============
+      deleteUser: (userId) => {
+        // Remove user from localStorage
+        set((state) => ({
+          users: state.users.filter((u) => u.id !== userId),
+          children: state.children.filter((c) => c.userId !== userId),
+          consultations: state.consultations.filter((c) => c.userId !== userId),
+          notifications: state.notifications.filter((n) => n.userId !== userId),
+        }));
+
+        // Delete from Supabase broadcast_consultations
+        if (isSupabaseConfigured && supabase) {
+          void (async () => {
+            try {
+              await supabase.from("broadcast_consultations").delete().eq("user_id", userId);
+            } catch (err) {
+              console.warn("[Supabase deleteUser] exception:", err);
+            }
+          })();
+        }
+
+        return { success: true, message: "Pengguna berhasil dihapus." };
+      },
+
+      deleteConsultation: (consultationId) => {
+        // Remove from localStorage
+        set((state) => ({
+          consultations: state.consultations.filter((c) => c.id !== consultationId),
+          notifications: state.notifications.filter((n) => n.consultationId !== consultationId),
+        }));
+
+        // Delete from Supabase broadcast_consultations
+        if (isSupabaseConfigured && supabase) {
+          void (async () => {
+            try {
+              await supabase.from("broadcast_consultations").delete().eq("id", consultationId);
+            } catch (err) {
+              console.warn("[Supabase deleteConsultation] exception:", err);
+            }
+          })();
+        }
+
+        return { success: true, message: "Konsultasi berhasil dihapus." };
       },
 
       // ============ STATS ============

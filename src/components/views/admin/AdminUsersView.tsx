@@ -13,11 +13,22 @@ import {
   Calendar,
   User,
   Loader2,
+  Trash2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthStore } from "@/lib/gemas/auth-store";
 import { useGemasStore } from "@/lib/gemas/store";
@@ -29,9 +40,11 @@ export function AdminUsersView() {
   const users = useAuthStore((s) => s.users);
   const children = useAuthStore((s) => s.children);
   const consultations = useAuthStore((s) => s.consultations);
+  const deleteUser = useAuthStore((s) => s.deleteUser);
   const [mounted, setMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [downloading, setDownloading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -302,6 +315,7 @@ export function AdminUsersView() {
                       <th className="text-center py-3 px-4 font-semibold text-gray-700">Anak</th>
                       <th className="text-center py-3 px-4 font-semibold text-gray-700">Konsultasi</th>
                       <th className="text-left py-3 px-4 font-semibold text-gray-700">Daftar</th>
+                      <th className="text-center py-3 px-4 font-semibold text-gray-700">Aksi</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -351,6 +365,16 @@ export function AdminUsersView() {
                             year: "numeric",
                           }) : "-"}
                         </td>
+                        <td className="py-3 px-4 text-center">
+                          <Button
+                            onClick={() => setDeleteTarget(user.id)}
+                            variant="outline"
+                            size="sm"
+                            className="rounded-full border-red-300 text-red-600 hover:bg-red-50 h-8 w-8 p-0"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -394,6 +418,14 @@ export function AdminUsersView() {
                       <Badge variant="secondary" className="bg-green-100 text-green-700 text-xs">
                         {user.consultationsCount} Konsultasi
                       </Badge>
+                      <Button
+                        onClick={() => setDeleteTarget(user.id)}
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full border-red-300 text-red-600 hover:bg-red-50 h-7 w-7 p-0 ml-auto"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   </div>
                 ))}
@@ -413,6 +445,38 @@ export function AdminUsersView() {
             </p>
           </div>
         )}
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Hapus Pengguna?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Apakah Anda yakin ingin menghapus pengguna ini? Semua data anak, konsultasi, dan notifikasi terkait juga akan dihapus. Tindakan ini tidak dapat dibatalkan.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Batal</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (deleteTarget) {
+                    const result = deleteUser(deleteTarget);
+                    if (result.success) {
+                      toast({ title: "Pengguna dihapus", description: result.message });
+                    } else {
+                      toast({ title: "Gagal hapus", description: result.message, variant: "destructive" });
+                    }
+                    setDeleteTarget(null);
+                  }
+                }}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Hapus Pengguna
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );

@@ -12,12 +12,23 @@ import {
   CalendarDays,
   UserRound,
   LayoutDashboard,
+  Trash2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useGemasStore } from "@/lib/gemas/store";
 import {
@@ -42,9 +53,11 @@ export function AdminConsultationsView() {
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const consultations = useAuthStore((s) => s.consultations);
   const refreshData = useAuthStore((s) => s.refreshData);
+  const deleteConsultation = useAuthStore((s) => s.deleteConsultation);
 
   const [activeFilter, setActiveFilter] = useState<FilterTab>("Semua");
   const [searchQuery, setSearchQuery] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   // Redirect if not admin
   useEffect(() => {
@@ -318,17 +331,25 @@ export function AdminConsultationsView() {
                         </Badge>
                       </div>
                       {/* Aksi */}
-                      <div className="sm:col-span-1 flex sm:justify-end items-start">
+                      <div className="sm:col-span-1 flex sm:justify-end items-start gap-2">
                         <Button
                           onClick={() =>
                             setViewWithConsultation("admin-consultation-detail", c.id)
                           }
                           size="sm"
-                          className="rounded-full bg-green-600 hover:bg-green-700 text-white h-8 px-4 text-xs w-full sm:w-auto"
+                          className="rounded-full bg-green-600 hover:bg-green-700 text-white h-8 px-4 text-xs flex-1 sm:flex-initial"
                         >
                           <Eye className="h-3 w-3 sm:mr-1" />
                           <span className="sm:hidden">Lihat Detail</span>
                           <span className="hidden sm:inline">Lihat</span>
+                        </Button>
+                        <Button
+                          onClick={() => setDeleteTarget(c.id)}
+                          size="sm"
+                          variant="outline"
+                          className="rounded-full border-red-300 text-red-600 hover:bg-red-50 h-8 w-8 p-0 flex-shrink-0"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                     </div>
@@ -353,6 +374,38 @@ export function AdminConsultationsView() {
             Kembali ke Dashboard
           </button>
         </div>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Hapus Konsultasi?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Apakah Anda yakin ingin menghapus konsultasi ini? Tindakan ini tidak dapat dibatalkan.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Batal</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (deleteTarget) {
+                    const result = deleteConsultation(deleteTarget);
+                    if (result.success) {
+                      toast({ title: "Konsultasi dihapus", description: result.message });
+                    } else {
+                      toast({ title: "Gagal hapus", description: result.message, variant: "destructive" });
+                    }
+                    setDeleteTarget(null);
+                  }
+                }}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Hapus Konsultasi
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
