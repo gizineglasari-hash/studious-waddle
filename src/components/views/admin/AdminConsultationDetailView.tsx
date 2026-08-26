@@ -18,6 +18,7 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
+  LayoutDashboard,
   FileText,
   CheckCheck,
 } from "lucide-react";
@@ -205,6 +206,15 @@ export function AdminConsultationDetailView() {
               </p>
             </div>
           </div>
+          <Button
+            onClick={() => setView("admin-dashboard")}
+            variant="outline"
+            size="sm"
+            className="rounded-full border-green-300 text-green-700 hover:bg-green-50"
+          >
+            <LayoutDashboard className="h-4 w-4 mr-1.5" />
+            Dashboard
+          </Button>
         </div>
 
         {/* Status change actions */}

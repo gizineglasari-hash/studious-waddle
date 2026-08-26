@@ -16,6 +16,7 @@ import {
   Hash,
   TrendingUp,
   Calendar,
+  LayoutDashboard,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -514,6 +515,15 @@ export function AnalyticsPengunjungView() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => setView("admin-dashboard")}
+              variant="outline"
+              size="sm"
+              className="rounded-full border-green-300 text-green-700 hover:bg-green-50"
+            >
+              <LayoutDashboard className="h-4 w-4 mr-1" />
+              Dashboard
+            </Button>
             <Button
               onClick={handleRefresh}
               variant="outline"

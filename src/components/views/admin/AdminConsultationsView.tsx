@@ -11,6 +11,7 @@ import {
   Phone,
   CalendarDays,
   UserRound,
+  LayoutDashboard,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -140,6 +141,15 @@ export function AdminConsultationsView() {
               </p>
             </div>
           </div>
+          <Button
+            onClick={() => setView("admin-dashboard")}
+            variant="outline"
+            size="sm"
+            className="rounded-full border-green-300 text-green-700 hover:bg-green-50"
+          >
+            <LayoutDashboard className="h-4 w-4 mr-1.5" />
+            Dashboard
+          </Button>
         </div>
 
         {/* Search */}
