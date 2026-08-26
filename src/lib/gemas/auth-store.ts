@@ -100,6 +100,24 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
+// Generate valid UUID for Supabase tables (all id columns are UUID type)
+function generateUUID(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  // Fallback for older browsers
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+// Pick the right ID generator based on Supabase availability
+function genId(): string {
+  return isSupabaseConfigured ? generateUUID() : generateId();
+}
+
 // =====================================================
 // DEFAULT ADMIN
 // =====================================================
@@ -446,7 +464,7 @@ export const useAuthStore = create<AuthState>()(
         }
 
         const newUser: UserProfile = {
-          id: generateId(),
+          id: genId(),
           namaOrangTua: data.namaOrangTua.trim(),
           email: emailLower,
           nomorTelepon: data.nomorTelepon.trim(),
@@ -647,7 +665,7 @@ export const useAuthStore = create<AuthState>()(
           let admin = users.find((u) => u.email.toLowerCase() === emailLower);
           if (!admin) {
             admin = {
-              id: isDefaultAdmin ? "admin-default" : generateId(),
+              id: isDefaultAdmin ? "admin-default" : genId(),
               namaOrangTua: "Administrator GEMAS",
               email: emailLower,
               nomorTelepon: "",
@@ -795,7 +813,7 @@ export const useAuthStore = create<AuthState>()(
         const now = new Date().toISOString();
         const newChild: ChildProfile = {
           ...data,
-          id: generateId(),
+          id: genId(),
           userId: currentUserId,
           createdAt: now,
           updatedAt: now,
@@ -901,7 +919,7 @@ export const useAuthStore = create<AuthState>()(
           return { success: false, message: "Pertanyaan minimal 10 karakter." };
         }
 
-        const consultationId = generateId();
+        const consultationId = genId();
         const now = new Date().toISOString();
 
         const newConsultation: Consultation = {
@@ -927,7 +945,7 @@ export const useAuthStore = create<AuthState>()(
         };
 
         const adminNotif: AppNotification = {
-          id: generateId(),
+          id: genId(),
           userId: "admin",
           consultationId,
           title: "Konsultasi Baru",
@@ -1028,7 +1046,7 @@ export const useAuthStore = create<AuthState>()(
 
         // Notification to the parent user.
         const userNotif: AppNotification = {
-          id: generateId(),
+          id: genId(),
           userId: consultation.userId,
           consultationId,
           title: "Konsultasi Dijawab",

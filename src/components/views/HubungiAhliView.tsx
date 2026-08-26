@@ -37,9 +37,9 @@ export function HubungiAhliView() {
         {/* Profil Ahli Gizi */}
         <Card className="border-0 shadow-xl rounded-2xl overflow-hidden mb-6">
           <CardHeader className="bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 pb-3">
-            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-5">
-              {/* Foto ahli gizi */}
-              <div className="h-28 w-28 sm:h-32 sm:w-32 rounded-2xl overflow-hidden flex-shrink-0 shadow-md bg-gradient-to-br from-green-200 to-emerald-300">
+            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+              {/* Foto ahli gizi - lebih besar */}
+              <div className="h-40 w-40 sm:h-52 sm:w-52 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg bg-gradient-to-br from-green-200 to-emerald-300">
                 {NUTRITIONIST.foto ? (
                   <img
                     src={NUTRITIONIST.foto}
@@ -48,7 +48,7 @@ export function HubungiAhliView() {
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
-                    <User className="h-14 w-14 text-white" />
+                    <User className="h-20 w-20 text-white" />
                   </div>
                 )}
               </div>
