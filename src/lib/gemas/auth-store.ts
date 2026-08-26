@@ -350,6 +350,7 @@ interface AuthState {
   // Supabase-only helpers (no-ops in localStorage mode)
   restoreSession: () => Promise<void>;
   refreshData: () => Promise<void>;
+  resetPassword: (email: string) => Promise<{ success: boolean; message: string }>;
 }
 
 // =====================================================
@@ -796,6 +797,11 @@ export const useAuthStore = create<AuthState>()(
           return { success: false, message: "Anda harus login terlebih dahulu." };
         }
 
+        // Check if currentUserId is still a placeholder (login not complete)
+        if (currentUserId.startsWith("supabase-pending-")) {
+          return { success: false, message: "Sedang memuat data pengguna, coba lagi dalam beberapa detik." };
+        }
+
         // Sync validation
         if (!data.namaAnak.trim()) {
           return { success: false, message: "Nama anak wajib diisi." };
@@ -811,9 +817,10 @@ export const useAuthStore = create<AuthState>()(
         }
 
         const now = new Date().toISOString();
+        const localId = genId();
         const newChild: ChildProfile = {
           ...data,
-          id: genId(),
+          id: localId,
           userId: currentUserId,
           createdAt: now,
           updatedAt: now,
@@ -825,22 +832,33 @@ export const useAuthStore = create<AuthState>()(
         if (isSupabaseConfigured && supabase) {
           void (async () => {
             try {
-              const { error } = await supabase.from("children").insert({
-                id: newChild.id,
-                user_id: currentUserId,
-                nama_anak: newChild.namaAnak,
-                tanggal_lahir: newChild.tanggalLahir,
-                jenis_kelamin: newChild.jenisKelamin,
-                berat_badan: newChild.beratBadan,
-                tinggi_badan: newChild.tinggiBadan,
-                created_at: now,
-                updated_at: now,
-              });
+              // Don't send custom ID - let Supabase auto-generate UUID
+              const { data: inserted, error } = await supabase
+                .from("children")
+                .insert({
+                  user_id: currentUserId,
+                  nama_anak: newChild.namaAnak,
+                  tanggal_lahir: newChild.tanggalLahir,
+                  jenis_kelamin: newChild.jenisKelamin,
+                  berat_badan: newChild.beratBadan,
+                  tinggi_badan: newChild.tinggiBadan,
+                })
+                .select()
+                .single();
+
               if (error) {
                 console.error("[Supabase addChild] error:", error.message);
                 // Revert optimistic insert on failure.
                 set((state) => ({
-                  children: state.children.filter((c) => c.id !== newChild.id),
+                  children: state.children.filter((c) => c.id !== localId),
+                }));
+              } else if (inserted) {
+                // Replace local ID with real Supabase UUID
+                const realId = (inserted as any).id;
+                set((state) => ({
+                  children: state.children.map((c) =>
+                    c.id === localId ? { ...c, id: realId } : c
+                  ),
                 }));
               }
             } catch (err) {
@@ -963,10 +981,10 @@ export const useAuthStore = create<AuthState>()(
         if (isSupabaseConfigured && supabase) {
           void (async () => {
             try {
-              const { error: consultError } = await supabase
+              // Don't send custom ID - let Supabase auto-generate UUID
+              const { data: consultInserted, error: consultError } = await supabase
                 .from("consultations")
                 .insert({
-                  id: newConsultation.id,
                   user_id: currentUserId,
                   child_id: newConsultation.childId || null,
                   nama_anak: newConsultation.namaAnak,
@@ -982,25 +1000,32 @@ export const useAuthStore = create<AuthState>()(
                   status: "Menunggu Jawaban",
                   admin_id: null,
                   admin_name: null,
-                  created_at: now,
                   answered_at: null,
-                  updated_at: now,
-                });
-              if (consultError) {
-                console.error("[Supabase createConsultation] error:", consultError.message);
+                })
+                .select()
+                .single();
+
+              if (consultError || !consultInserted) {
+                console.error("[Supabase createConsultation] error:", consultError?.message);
                 return;
               }
+
+              // Replace local ID with real Supabase UUID
+              const realConsultId = (consultInserted as any).id;
+              set((state) => ({
+                consultations: state.consultations.map((c) =>
+                  c.id === consultationId ? { ...c, id: realConsultId } : c
+                ),
+              }));
 
               const { error: notifError } = await supabase
                 .from("notifications")
                 .insert({
-                  id: adminNotif.id,
                   user_id: "admin",
-                  consultation_id: consultationId,
+                  consultation_id: realConsultId,
                   title: adminNotif.title,
                   message: adminNotif.message,
                   is_read: false,
-                  created_at: now,
                 });
               if (notifError) {
                 console.error("[Supabase createConsultation notif] error:", notifError.message);
@@ -1391,6 +1416,46 @@ export const useAuthStore = create<AuthState>()(
         } catch (err) {
           console.error("[Supabase refreshData] exception:", err);
         }
+      },
+
+      resetPassword: async (email) => {
+        const emailLower = email.toLowerCase().trim();
+        if (!emailLower) {
+          return { success: false, message: "Email wajib diisi." };
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLower)) {
+          return { success: false, message: "Format email tidak valid." };
+        }
+
+        if (isSupabaseConfigured && supabase) {
+          try {
+            const { error } = await supabase.auth.resetPasswordForEmail(
+              emailLower,
+              {
+                redirectTo: typeof window !== "undefined"
+                  ? `${window.location.origin}/#reset-password`
+                  : undefined,
+              }
+            );
+            if (error) {
+              console.error("[Supabase resetPassword] error:", error.message);
+              return { success: false, message: error.message };
+            }
+            return {
+              success: true,
+              message: "Link reset password telah dikirim ke email Anda. Silakan cek inbox (dan folder spam).",
+            };
+          } catch (err) {
+            console.error("[Supabase resetPassword] exception:", err);
+            return { success: false, message: "Gagal mengirim email reset password." };
+          }
+        }
+
+        // localStorage mode - no real email reset possible
+        return {
+          success: false,
+          message: "Reset password tidak tersedia di mode offline. Hubungi admin untuk reset manual.",
+        };
       },
     }),
     {

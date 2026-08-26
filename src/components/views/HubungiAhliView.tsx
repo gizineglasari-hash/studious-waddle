@@ -37,9 +37,9 @@ export function HubungiAhliView() {
         {/* Profil Ahli Gizi */}
         <Card className="border-0 shadow-xl rounded-2xl overflow-hidden mb-6">
           <CardHeader className="bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 pb-3">
-            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
-              {/* Foto ahli gizi - lebih besar */}
-              <div className="h-40 w-40 sm:h-52 sm:w-52 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg bg-gradient-to-br from-green-200 to-emerald-300">
+            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-8">
+              {/* Foto ahli gizi - besar */}
+              <div className="h-48 w-48 sm:h-64 sm:w-64 rounded-3xl overflow-hidden flex-shrink-0 shadow-xl bg-gradient-to-br from-green-200 to-emerald-300 ring-4 ring-white">
                 {NUTRITIONIST.foto ? (
                   <img
                     src={NUTRITIONIST.foto}
@@ -48,14 +48,14 @@ export function HubungiAhliView() {
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
-                    <User className="h-20 w-20 text-white" />
+                    <User className="h-24 w-24 text-white" />
                   </div>
                 )}
               </div>
               <div className="text-center sm:text-left flex-1">
-                <CardTitle className="text-xl sm:text-2xl text-gray-900">{NUTRITIONIST.nama}</CardTitle>
-                <p className="text-sm font-semibold text-green-700 mb-1">{NUTRITIONIST.gelar}</p>
-                <p className="text-xs text-gray-600">{NUTRITIONIST.peran}</p>
+                <CardTitle className="text-2xl sm:text-3xl text-gray-900">{NUTRITIONIST.nama}</CardTitle>
+                <p className="text-base font-semibold text-green-700 mb-2">{NUTRITIONIST.gelar}</p>
+                <p className="text-sm text-gray-600">{NUTRITIONIST.peran}</p>
               </div>
             </div>
           </CardHeader>

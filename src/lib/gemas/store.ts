@@ -14,6 +14,7 @@ export type ViewKey =
   | "admin-analytics"
   | "login"
   | "register"
+  | "reset-password"
   | "user-dashboard"
   | "consultation-form"
   | "consultation-detail"

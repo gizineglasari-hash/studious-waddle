@@ -81,6 +81,7 @@ export default function Home() {
     currentView === "admin-analytics" ||
     currentView === "login" ||
     currentView === "register" ||
+    currentView === "reset-password" ||
     currentView === "user-dashboard" ||
     currentView === "consultation-form" ||
     currentView === "consultation-detail" ||
@@ -105,7 +106,7 @@ export default function Home() {
         {currentView === "tentang" && <TentangView />}
         {currentView === "admin-analytics" && <AdminAnalyticsView />}
         {/* Auth & Consultation Views */}
-        {(currentView === "login" || currentView === "register") && <LoginView />}
+        {(currentView === "login" || currentView === "register" || currentView === "reset-password") && <LoginView />}
         {currentView === "user-dashboard" && <UserDashboardView />}
         {currentView === "consultation-form" && <ConsultationFormView />}
         {currentView === "consultation-detail" && <ConsultationDetailView />}

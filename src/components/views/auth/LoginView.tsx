@@ -32,6 +32,7 @@ export function LoginView() {
   const { setView } = useGemasStore();
   const login = useAuthStore((state) => state.login);
   const register = useAuthStore((state) => state.register);
+  const resetPassword = useAuthStore((state) => state.resetPassword);
 
   const [mode, setMode] = useState<Mode>("login");
 
@@ -145,6 +146,108 @@ export function LoginView() {
       setLoading(false);
     }
   };
+
+  // ---------------- FORGOT PASSWORD ----------------
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetSent, setResetSent] = useState(false);
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetEmail.trim()) {
+      toast({
+        title: "Email belum diisi",
+        description: "Masukkan email yang terdaftar.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await resetPassword(resetEmail);
+      if (result.success) {
+        setResetSent(true);
+        toast({
+          title: "Email reset terkirim",
+          description: result.message,
+        });
+      } else {
+        toast({
+          title: "Gagal mengirim reset",
+          description: result.message,
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ---------------- UPDATE PASSWORD (from email link) ----------------
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [passwordUpdated, setPasswordUpdated] = useState(false);
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPassword.trim() || newPassword.length < 6) {
+      toast({
+        title: "Password tidak valid",
+        description: "Password minimal 6 karakter.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      toast({
+        title: "Password tidak cocok",
+        description: "Konfirmasi password tidak sama.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { supabase } = await import("@/lib/supabase/client");
+      if (!supabase) {
+        toast({
+          title: "Error",
+          description: "Sistem reset password tidak tersedia.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        toast({
+          title: "Gagal update password",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        setPasswordUpdated(true);
+        toast({
+          title: "Password berhasil diubah",
+          description: "Silakan login dengan password baru Anda.",
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Terjadi kesalahan. Silakan coba lagi.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Check if we're in reset mode (from email link with hash #reset-password)
+  const isResetMode = typeof window !== "undefined" && window.location.hash === "#reset-password";
 
   return (
     <div className="animate-fade-in min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 px-4 py-8">
@@ -434,60 +537,152 @@ export function LoginView() {
               </form>
             )}
 
-            {/* ============ FORGOT MODE ============ */}
-            {mode === "forgot" && (
+            {/* ============ RESET PASSWORD MODE (from email link) ============ */}
+            {isResetMode && (
               <div className="space-y-5">
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0 h-9 w-9 rounded-full bg-blue-100 flex items-center justify-center">
-                      <Info className="h-5 w-5 text-blue-600" />
+                {passwordUpdated ? (
+                  <div className="text-center space-y-4">
+                    <div className="mx-auto h-16 w-16 rounded-full bg-green-100 flex items-center justify-center">
+                      <ShieldCheck className="h-8 w-8 text-green-600" />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-blue-900 mb-1.5">
-                        Hubungi Administrator
-                      </p>
-                      <p className="text-xs text-blue-800 leading-relaxed">
-                        Untuk keamanan akun, pemulihan password dilakukan melalui administrator
-                        GEMAS. Silakan hubungi ahli gizi atau admin Puskesmas Neglasari melalui
-                        kontak yang tersedia untuk mereset password akun Anda.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-                  <div className="flex items-start gap-3">
-                    <ShieldCheck className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
                     <div>
-                      <p className="text-xs font-semibold text-green-900 mb-1">Informasi yang perlu disiapkan:</p>
-                      <ul className="text-xs text-green-800 space-y-1 list-disc list-inside">
-                        <li>Email yang digunakan saat mendaftar</li>
-                        <li>Nama lengkap orang tua</li>
-                        <li>Nomor telepon yang terdaftar</li>
-                      </ul>
+                      <p className="text-lg font-bold text-gray-900">Password Berhasil Diubah!</p>
+                      <p className="text-sm text-gray-600 mt-2">
+                        Password Anda telah diperbarui. Silakan login dengan password baru.
+                      </p>
                     </div>
+                    <Button
+                      onClick={() => {
+                        window.location.hash = "";
+                        switchMode("login");
+                      }}
+                      className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-full"
+                    >
+                      <LogIn className="h-4 w-4 mr-2" />
+                      Login Sekarang
+                    </Button>
                   </div>
-                </div>
+                ) : (
+                  <form onSubmit={handleUpdatePassword} className="space-y-4">
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                      <div className="flex items-start gap-3">
+                        <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-blue-800">
+                          Buat password baru untuk akun Anda. Password minimal 6 karakter.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-gray-700">Password Baru</Label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Minimal 6 karakter"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          className="pl-9 pr-9"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-gray-700">Konfirmasi Password Baru</Label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Ulangi password baru"
+                          value={confirmNewPassword}
+                          onChange={(e) => setConfirmNewPassword(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-full"
+                    >
+                      {loading ? "Menyimpan..." : "Simpan Password Baru"}
+                    </Button>
+                  </form>
+                )}
+              </div>
+            )}
 
-                <Button
-                  onClick={() => setView("hubungi-ahli")}
-                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-full shadow-md hover:shadow-lg transition-all"
-                >
-                  Lihat Kontak Ahli Gizi
-                </Button>
-
-                <Separator className="my-2" />
-
-                <p className="text-center text-sm text-gray-600">
-                  Ingat password Anda?{" "}
-                  <button
-                    type="button"
-                    onClick={() => switchMode("login")}
-                    className="text-green-700 hover:text-green-800 font-semibold"
-                  >
-                    Kembali ke Login
-                  </button>
-                </p>
+            {/* ============ FORGOT MODE (request reset email) ============ */}
+            {mode === "forgot" && !isResetMode && (
+              <div className="space-y-5">
+                {resetSent ? (
+                  <div className="text-center space-y-4">
+                    <div className="mx-auto h-16 w-16 rounded-full bg-green-100 flex items-center justify-center">
+                      <Mail className="h-8 w-8 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold text-gray-900">Email Terkirim!</p>
+                      <p className="text-sm text-gray-600 mt-2">
+                        Kami telah mengirim link reset password ke <strong>{resetEmail}</strong>.
+                        Silakan cek inbox email Anda (juga cek folder spam).
+                      </p>
+                    </div>
+                    <Button
+                      onClick={() => switchMode("login")}
+                      className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-full"
+                    >
+                      <LogIn className="h-4 w-4 mr-2" />
+                      Kembali ke Login
+                    </Button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleResetPassword} className="space-y-4">
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                      <div className="flex items-start gap-3">
+                        <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-blue-800">
+                          Masukkan email yang terdaftar. Kami akan mengirim link untuk reset password ke email Anda.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-gray-700">Email Terdaftar</Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                          type="email"
+                          placeholder="email@contoh.com"
+                          value={resetEmail}
+                          onChange={(e) => setResetEmail(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-full"
+                    >
+                      {loading ? "Mengirim..." : "Kirim Link Reset Password"}
+                    </Button>
+                    <Separator className="my-2" />
+                    <p className="text-center text-sm text-gray-600">
+                      Ingat password Anda?{" "}
+                      <button
+                        type="button"
+                        onClick={() => switchMode("login")}
+                        className="text-green-700 hover:text-green-800 font-semibold"
+                      >
+                        Kembali ke Login
+                      </button>
+                    </p>
+                  </form>
+                )}
               </div>
             )}
           </CardContent>
