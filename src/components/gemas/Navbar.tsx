@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useGemasStore, type ViewKey } from "@/lib/gemas/store";
 import { useAuthStore } from "@/lib/gemas/auth-store";
+import { useAnalyticsStore } from "@/lib/gemas/analytics-store";
 
 const NAV_ITEMS: { key: ViewKey; label: string }[] = [
   { key: "home", label: "Beranda" },
@@ -29,74 +30,14 @@ export function Navbar() {
   const isLoggedIn = !!currentUser;
   const unreadCount = isLoggedIn ? getUnreadNotificationCount(currentUser.id) : 0;
 
-  // Track visit for admin analytics (localStorage based)
+  // Track visit for admin analytics using analytics store
+  const trackVisit = useAnalyticsStore((s) => s.trackVisit);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
-
-    try {
-      const stored = localStorage.getItem("gemas-analytics-stats");
-      let stats: any = stored ? JSON.parse(stored) : {
-        totalVisits: 0,
-        uniqueDays: [],
-        firstVisit: "",
-        lastVisit: "",
-        visitsByPage: {},
-        visitsByBrowser: {},
-        visitsByDevice: {},
-        visitHistory: [],
-      };
-
-      // Convert uniqueDays back to array if it's not
-      if (!Array.isArray(stats.uniqueDays)) {
-        stats.uniqueDays = [];
-      }
-
-      const now = new Date();
-      const todayStr = now.toISOString().split("T")[0];
-
-      // Get browser info
-      const ua = navigator.userAgent;
-      let browser = "Unknown";
-      let device = "Desktop";
-      if (ua.includes("Edg/")) browser = "Microsoft Edge";
-      else if (ua.includes("Chrome/")) browser = "Google Chrome";
-      else if (ua.includes("Firefox/")) browser = "Mozilla Firefox";
-      else if (ua.includes("Safari/")) browser = "Apple Safari";
-      if (/Mobi|Android/i.test(ua)) device = "Mobile";
-      else if (/iPad|Tablet/i.test(ua)) device = "Tablet";
-
-      // Determine page name
-      const pageName = currentView === "home" ? "Beranda" : currentView;
-
-      // Update stats
-      stats.totalVisits = (stats.totalVisits || 0) + 1;
-      if (!stats.uniqueDays.includes(todayStr)) {
-        stats.uniqueDays.push(todayStr);
-      }
-      if (!stats.firstVisit) stats.firstVisit = now.toISOString();
-      stats.lastVisit = now.toISOString();
-      stats.visitsByPage = stats.visitsByPage || {};
-      stats.visitsByPage[pageName] = (stats.visitsByPage[pageName] || 0) + 1;
-      stats.visitsByBrowser = stats.visitsByBrowser || {};
-      stats.visitsByBrowser[browser] = (stats.visitsByBrowser[browser] || 0) + 1;
-      stats.visitsByDevice = stats.visitsByDevice || {};
-      stats.visitsByDevice[device] = (stats.visitsByDevice[device] || 0) + 1;
-      stats.visitHistory = stats.visitHistory || [];
-      stats.visitHistory.push({
-        timestamp: now.toISOString(),
-        page: pageName,
-        userAgent: browser,
-      });
-      // Keep only last 50 visits
-      if (stats.visitHistory.length > 50) {
-        stats.visitHistory = stats.visitHistory.slice(-50);
-      }
-
-      localStorage.setItem("gemas-analytics-stats", JSON.stringify(stats));
-    } catch (e) {
-      // Silently fail - don't break the UI
-    }
-  }, [currentView]);
+    // Track visit via analytics store (replaces old localStorage tracking)
+    trackVisit(currentView);
+  }, [currentView, trackVisit]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);

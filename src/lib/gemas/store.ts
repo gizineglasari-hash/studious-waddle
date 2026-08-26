@@ -11,8 +11,7 @@ export type ViewKey =
   | "video-edukasi"
   | "hubungi-ahli"
   | "tentang"
-  | "admin-analytics" // hidden admin analytics view
-  // Auth & Consultation views
+  | "admin-analytics"
   | "login"
   | "register"
   | "user-dashboard"
@@ -22,7 +21,9 @@ export type ViewKey =
   | "admin-dashboard"
   | "admin-consultations"
   | "admin-consultation-detail"
-  | "admin-history";
+  | "admin-history"
+  | "admin-analytics-pengunjung"
+  | "admin-edit-website";
 
 export interface MeasurementRecord {
   id: string;

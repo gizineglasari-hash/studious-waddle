@@ -11,6 +11,8 @@ import { VideoEdukasiView } from "@/components/views/VideoEdukasiView";
 import { HubungiAhliView } from "@/components/views/HubungiAhliView";
 import { TentangView } from "@/components/views/TentangView";
 import { AdminAnalyticsView } from "@/components/views/AdminAnalyticsView";
+import { AnalyticsPengunjungView } from "@/components/views/admin/AnalyticsPengunjungView";
+import { EditWebsiteView } from "@/components/views/admin/EditWebsiteView";
 import { LoginView } from "@/components/views/auth/LoginView";
 import { UserDashboardView } from "@/components/views/auth/UserDashboardView";
 import { ConsultationFormView } from "@/components/views/auth/ConsultationFormView";
@@ -79,7 +81,9 @@ export default function Home() {
     currentView === "admin-dashboard" ||
     currentView === "admin-consultations" ||
     currentView === "admin-consultation-detail" ||
-    currentView === "admin-history";
+    currentView === "admin-history" ||
+    currentView === "admin-analytics-pengunjung" ||
+    currentView === "admin-edit-website";
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -104,6 +108,8 @@ export default function Home() {
         {currentView === "admin-consultations" && <AdminConsultationsView />}
         {currentView === "admin-consultation-detail" && <AdminConsultationDetailView />}
         {currentView === "admin-history" && <AdminConsultationsView />}
+        {currentView === "admin-analytics-pengunjung" && <AnalyticsPengunjungView />}
+        {currentView === "admin-edit-website" && <EditWebsiteView />}
       </main>
       {!isHiddenView && <Footer />}
     </div>

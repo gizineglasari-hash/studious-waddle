@@ -16,6 +16,8 @@ import {
   Inbox,
   ShieldCheck,
   RefreshCw,
+  BarChart3,
+  LayoutGrid,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -178,7 +180,7 @@ export function AdminDashboardView() {
     <div className="animate-fade-in min-h-screen bg-gradient-to-br from-gray-50 to-green-50/30">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
         {/* Header */}
-        <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-gray-900 to-gray-700 flex items-center justify-center shadow-md flex-shrink-0">
               <LayoutDashboard className="h-6 w-6 text-white" />
@@ -207,7 +209,7 @@ export function AdminDashboardView() {
               Refresh
             </Button>
             <Button
-              onClick={handleLogout}
+              onClick={handleAdminLogout}
               variant="outline"
               size="sm"
               className="rounded-full border-red-300 text-red-700 hover:bg-red-50"
@@ -216,6 +218,54 @@ export function AdminDashboardView() {
               Keluar
             </Button>
           </div>
+        </div>
+
+        {/* Navigation Sidebar - Horizontal on mobile, vertical on desktop */}
+        <div className="mb-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          <Button
+            onClick={() => setView("admin-dashboard")}
+            className="bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs sm:text-sm"
+            size="sm"
+          >
+            <LayoutDashboard className="h-4 w-4 mr-1.5" />
+            Dashboard
+          </Button>
+          <Button
+            onClick={() => setView("admin-consultations")}
+            variant="outline"
+            className="rounded-xl text-xs sm:text-sm"
+            size="sm"
+          >
+            <MessageSquare className="h-4 w-4 mr-1.5" />
+            Konsultasi
+          </Button>
+          <Button
+            onClick={() => setView("admin-analytics-pengunjung")}
+            variant="outline"
+            className="rounded-xl text-xs sm:text-sm"
+            size="sm"
+          >
+            <BarChart3 className="h-4 w-4 mr-1.5" />
+            Analytics Pengunjung
+          </Button>
+          <Button
+            onClick={() => setView("admin-edit-website")}
+            variant="outline"
+            className="rounded-xl text-xs sm:text-sm"
+            size="sm"
+          >
+            <LayoutGrid className="h-4 w-4 mr-1.5" />
+            Edit Website
+          </Button>
+          <Button
+            onClick={() => setView("admin-history")}
+            variant="outline"
+            className="rounded-xl text-xs sm:text-sm"
+            size="sm"
+          >
+            <History className="h-4 w-4 mr-1.5" />
+            Riwayat
+          </Button>
         </div>
 
         {/* Stats Cards */}
