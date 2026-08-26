@@ -15,7 +15,7 @@ const NAV_ITEMS: { key: ViewKey; label: string }[] = [
   { key: "makan-anak", label: "Makan Anak" },
   { key: "video-edukasi", label: "Video dan Media Edukasi" },
   { key: "hubungi-ahli", label: "Hubungi Ahli Gizi" },
-  { key: "tentang", label: "Tentang GEMAS" },
+  { key: "tentang", label: "Tentang Kami" },
 ];
 
 export function Navbar() {
@@ -135,11 +135,11 @@ export function Navbar() {
               </span>
             </div>
             <div className="text-left leading-tight">
-              <div className="font-heading text-xl font-extrabold text-green-700">
-                GEMAS
+              <div className="font-heading text-lg sm:text-xl font-extrabold text-green-700">
+                Koniciwa Gemas Gempita
               </div>
-              <div className="text-[10px] text-muted-foreground hidden sm:block font-medium">
-                Gerakan Edukasi Makanan Anak Sehat
+              <div className="text-[9px] sm:text-[10px] text-muted-foreground hidden sm:block font-medium">
+                Gerakan Edukasi Makanan Anak Sehat &amp; Ibu Balita
               </div>
             </div>
           </button>

@@ -27,16 +27,16 @@ export function Footer() {
                 <Heart className="h-4 w-4 text-white" fill="white" />
               </div>
               <div>
-                <div className="font-heading text-lg font-extrabold text-green-700">
-                  GEMAS
+                <div className="font-heading text-base sm:text-lg font-extrabold text-green-700">
+                  Koniciwa Gemas Gempita
                 </div>
                 <div className="text-[10px] text-muted-foreground">
-                  Gerakan Edukasi Makanan Anak Sehat
+                  Gerakan Edukasi Makanan Anak Sehat &amp; Ibu Balita
                 </div>
               </div>
             </div>
             <p className="text-sm text-gray-600 mb-3 leading-relaxed">
-              Platform edukasi gizi anak dari UPTD Puskesmas Neglasari Kota Bandung untuk membantu orang tua memantau pertumbuhan dan menerapkan pemberian makan yang tepat.
+              Inovasi website yang menggabungkan KONICIWA, GEMAS, dan GEMPITA - media edukasi gizi anak dari UPTD Puskesmas Neglasari Kota Bandung untuk membantu orang tua memantau pertumbuhan dan menerapkan pemberian makan yang tepat.
             </p>
             <p className="text-xs font-semibold text-green-700">
               {PUSKESMAS.nama}
@@ -107,7 +107,7 @@ export function Footer() {
 
         {/* Copyright */}
         <div className="mt-6 text-center text-xs text-gray-500">
-          &copy; 2026 GEMAS &ndash; UPTD Puskesmas Neglasari Kota Bandung
+          &copy; 2026 Koniciwa Gemas Gempita &ndash; UPTD Puskesmas Neglasari Kota Bandung
         </div>
       </div>
     </footer>

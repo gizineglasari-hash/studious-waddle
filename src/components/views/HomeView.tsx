@@ -107,7 +107,7 @@ export function HomeView() {
                 </span>
               </h1>
               <p className="text-base sm:text-lg text-gray-600 leading-relaxed mb-6 max-w-xl mx-auto lg:mx-0">
-                GEMAS membantu Ayah dan Bunda memahami gizi anak, memantau pertumbuhan, dan memberikan makanan yang sesuai agar Si Kecil tumbuh optimal.
+                Koniciwa Gemas Gempita membantu Ayah dan Bunda memahami gizi anak, memantau pertumbuhan, dan memberikan makanan yang sesuai agar Si Kecil tumbuh optimal.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start">
                 <Button
@@ -146,7 +146,7 @@ export function HomeView() {
                 <div className="absolute inset-4 rounded-full bg-white/80 backdrop-blur-sm shadow-inner overflow-hidden">
                   <img
                     src="/images/foto-beranda-baru.png"
-                    alt="Foto Beranda - Gerakan Edukasi Makanan Anak Sehat"
+                    alt="Foto Beranda - Koniciwa Gemas Gempita"
                     title="Foto Beranda"
                     className="absolute inset-0 w-full h-full object-cover"
                   />
@@ -205,7 +205,7 @@ export function HomeView() {
               Fitur Lengkap
             </Badge>
             <h2 className="font-heading text-2xl sm:text-3xl lg:text-4xl font-extrabold text-gray-900 mb-3">
-              Apa yang Bisa Dilakukan di GEMAS?
+              Apa yang Bisa Dilakukan di Koniciwa Gemas Gempita?
             </h2>
             <p className="text-gray-600 max-w-2xl mx-auto leading-relaxed">
               Beragam fitur edukasi gizi anak untuk membantu orang tua memantau pertumbuhan dan memberikan makan yang tepat bagi Si Kecil.

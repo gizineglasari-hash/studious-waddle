@@ -26,11 +26,17 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "GEMAS – Gerakan Edukasi Makanan Anak Sehat | UPTD Puskesmas Neglasari Kota Bandung",
+  title: "Koniciwa Gemas Gempita – Gerakan Edukasi Makanan Anak Sehat | UPTD Puskesmas Neglasari Kota Bandung",
   description:
-    "GEMAS adalah platform edukasi gizi anak dari UPTD Puskesmas Neglasari Kota Bandung untuk membantu orang tua memantau pertumbuhan, memahami MP-ASI, makanan anak, dan status gizi berdasarkan standar WHO.",
+    "Koniciwa Gemas Gempita merupakan inovasi website yang menggabungkan KONICIWA (Konseling Cinta Gizi via WhatsApp), GEMAS (Gerakan Edukasi Makanan Anak Sehat), dan GEMPITA (Gerakan Edukasi Makanan pada Ibu Balita). Platform edukasi gizi anak dari UPTD Puskesmas Neglasari Kota Bandung.",
   keywords: [
+    "Koniciwa Gemas Gempita",
+    "KONICIWA",
     "GEMAS",
+    "GEMPITA",
+    "Konseling Cinta Gizi",
+    "Gerakan Edukasi Makanan Anak Sehat",
+    "Gerakan Edukasi Makanan pada Ibu Balita",
     "gizi anak",
     "MP-ASI",
     "status gizi",
@@ -43,16 +49,16 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: "UPTD Puskesmas Neglasari Kota Bandung" }],
   openGraph: {
-    title: "GEMAS – Gerakan Edukasi Makanan Anak Sehat",
+    title: "Koniciwa Gemas Gempita – Gerakan Edukasi Makanan Anak Sehat",
     description:
-      "Platform edukasi gizi anak dari UPTD Puskesmas Neglasari Kota Bandung. Cek status gizi, MP-ASI, makanan anak, dan pantau pertumbuhan berdasarkan standar WHO.",
-    siteName: "GEMAS",
+      "Koniciwa Gemas Gempita merupakan inovasi website yang menggabungkan KONICIWA, GEMAS, dan GEMPITA. Platform edukasi gizi anak dari UPTD Puskesmas Neglasari Kota Bandung.",
+    siteName: "Koniciwa Gemas Gempita",
     type: "website",
     locale: "id_ID",
   },
   twitter: {
     card: "summary_large_image",
-    title: "GEMAS – Gerakan Edukasi Makanan Anak Sehat",
+    title: "Koniciwa Gemas Gempita – Gerakan Edukasi Makanan Anak Sehat",
     description:
       "Platform edukasi gizi anak dari UPTD Puskesmas Neglasari Kota Bandung.",
   },

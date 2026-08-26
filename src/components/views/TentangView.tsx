@@ -27,10 +27,10 @@ export function TentangView() {
             Tentang Kami
           </Badge>
           <h1 className="font-heading text-2xl sm:text-3xl lg:text-4xl font-extrabold text-gray-900 mb-3">
-            Tentang GEMAS
+            Tentang Koniciwa Gemas Gempita
           </h1>
           <p className="text-gray-600 max-w-2xl mx-auto leading-relaxed text-sm sm:text-base">
-            Gerakan Edukasi Makanan Anak Sehat &mdash; platform edukasi gizi dari UPTD Puskesmas Neglasari Kota Bandung.
+            Inovasi website yang menggabungkan KONICIWA, GEMAS, dan GEMPITA &mdash; media edukasi gizi dari UPTD Puskesmas Neglasari Kota Bandung.
           </p>
         </div>
 
@@ -42,14 +42,14 @@ export function TentangView() {
                 🥗
               </div>
               <div>
-                <CardTitle className="text-2xl">GEMAS</CardTitle>
-                <p className="text-sm text-green-50 font-medium">Gerakan Edukasi Makanan Anak Sehat</p>
+                <CardTitle className="text-xl sm:text-2xl">Koniciwa Gemas Gempita</CardTitle>
+                <p className="text-xs sm:text-sm text-green-50 font-medium">KONICIWA · GEMAS · GEMPITA</p>
               </div>
             </div>
           </CardHeader>
           <CardContent className="pt-5">
             <p className="text-sm text-gray-700 leading-relaxed">
-              GEMAS merupakan media edukasi gizi yang dikembangkan oleh UPTD Puskesmas Neglasari Kota Bandung untuk membantu orang tua memahami kebutuhan gizi anak, memantau pertumbuhan, dan menerapkan praktik pemberian makan yang tepat. Platform ini menyediakan kalkulator status gizi berdasarkan standar WHO, edukasi MP-ASI sesuai usia, buku foto makanan, video edukasi, serta layanan konsultasi dengan ahli gizi.
+              <strong>Koniciwa Gemas Gempita</strong> merupakan inovasi website yang menggabungkan <strong>KONICIWA (Konseling Cinta Gizi via WhatsApp)</strong>, <strong>GEMAS (Gerakan Edukasi Makanan Anak Sehat)</strong>, dan <strong>GEMPITA (Gerakan Edukasi Makanan pada Ibu Balita)</strong>. Website ini menjadi media edukasi bagi orang tua untuk memahami gizi anak, memantau pertumbuhan dan status gizi, serta menerapkan pemberian makanan yang sesuai. Dilengkapi <strong>fitur konsultasi gizi online</strong>, Koniciwa Gemas Gempita membantu orang tua memperoleh informasi dan pendampingan untuk mendukung tumbuh kembang Si Kecil secara optimal.
             </p>
             <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full">
               <span className="text-sm font-semibold text-amber-800">
@@ -64,7 +64,7 @@ export function TentangView() {
           <CardHeader className="bg-gradient-to-r from-blue-50 to-sky-50 pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
               <Target className="h-5 w-5 text-blue-600" />
-              Tujuan Website GEMAS
+              Tujuan Website Koniciwa Gemas Gempita
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-5">
@@ -91,7 +91,7 @@ export function TentangView() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-amber-800 leading-relaxed">
-              GEMAS merupakan media edukasi dan skrining awal. Hasil pengukuran bukan diagnosis medis. Apabila ditemukan hasil yang perlu diperhatikan, orang tua dianjurkan berkonsultasi dengan tenaga kesehatan atau ahli gizi. Kalkulator status gizi menggunakan standar WHO Child Growth Standards (untuk anak 0-5 tahun) dan WHO Growth Reference 2007 (untuk anak 5-19 tahun) dengan metode LMS yang akurat.
+              Koniciwa Gemas Gempita merupakan media edukasi dan skrining awal. Hasil pengukuran bukan diagnosis medis. Apabila ditemukan hasil yang perlu diperhatikan, orang tua dianjurkan berkonsultasi dengan tenaga kesehatan atau ahli gizi. Kalkulator status gizi menggunakan standar WHO Child Growth Standards (untuk anak 0-5 tahun) dan WHO Growth Reference 2007 (untuk anak 5-19 tahun) dengan metode LMS yang akurat.
             </p>
           </CardContent>
         </Card>
