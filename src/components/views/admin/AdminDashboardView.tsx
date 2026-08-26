@@ -219,7 +219,7 @@ export function AdminDashboardView() {
               Refresh
             </Button>
             <Button
-              onClick={handleAdminLogout}
+              onClick={handleLogout}
               variant="outline"
               size="sm"
               className="rounded-full border-red-300 text-red-700 hover:bg-red-50"
