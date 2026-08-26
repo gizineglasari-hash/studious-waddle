@@ -22,9 +22,16 @@ import { AdminDashboardView } from "@/components/views/admin/AdminDashboardView"
 import { AdminConsultationsView } from "@/components/views/admin/AdminConsultationsView";
 import { AdminConsultationDetailView } from "@/components/views/admin/AdminConsultationDetailView";
 import { useGemasStore } from "@/lib/gemas/store";
+import { useAuthStore } from "@/lib/gemas/auth-store";
 
 export default function Home() {
   const { currentView, setView } = useGemasStore();
+
+  // Restore Supabase session on app load (multi-device auth)
+  const restoreSession = useAuthStore((s) => s.restoreSession);
+  useEffect(() => {
+    restoreSession();
+  }, [restoreSession]);
 
   // Secret admin access triggers:
   // 1. Keyboard shortcut: Ctrl + Shift + A (analytics)

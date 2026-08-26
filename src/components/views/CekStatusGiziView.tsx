@@ -522,8 +522,8 @@ export function CekStatusGiziView() {
     <body>
       <div class="header">
         <h1>Hasil Cek Status Gizi Anak</h1>
-        <p class="puskesmas">GEMAS - UPTD Puskesmas Neglasari Kota Bandung</p>
-        <p>Gerakan Edukasi Makanan Anak Sehat</p>
+        <p class="puskesmas">Koniciwa Gemas Gempita - UPTD Puskesmas Neglasari Kota Bandung</p>
+        <p>KONICIWA · GEMAS · GEMPITA</p>
       </div>
 
       <h2>1. Data Anak</h2>
@@ -577,8 +577,8 @@ export function CekStatusGiziView() {
       </div>
 
       <div class="footer">
-        <p>Dicetak dari GEMAS pada ${new Date().toLocaleString("id-ID")}</p>
-        <p>© 2026 GEMAS - UPTD Puskesmas Neglasari Kota Bandung</p>
+        <p>Dicetak dari Koniciwa Gemas Gempita pada ${new Date().toLocaleString("id-ID")}</p>
+        <p>© 2026 Koniciwa Gemas Gempita - UPTD Puskesmas Neglasari Kota Bandung</p>
       </div>
     </body>
     </html>
