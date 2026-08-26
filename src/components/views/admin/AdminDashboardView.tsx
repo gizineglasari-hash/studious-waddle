@@ -50,8 +50,9 @@ export function AdminDashboardView() {
   const users = useAuthStore((s) => s.users);
   const notifications = useAuthStore((s) => s.notifications);
   const markAllNotificationsRead = useAuthStore((s) => s.markAllNotificationsRead);
+  const refreshData = useAuthStore((s) => s.refreshData);
 
-  // Redirect if not admin (external calls only — safe in effect)
+  // Redirect if not admin
   useEffect(() => {
     if (!isAdmin) {
       toast({
@@ -62,6 +63,17 @@ export function AdminDashboardView() {
       setView("admin-login");
     }
   }, [isAdmin, setView, toast]);
+
+  // Auto-refresh data from Supabase when admin dashboard loads
+  // and also set up polling every 10 seconds for real-time updates
+  useEffect(() => {
+    if (!isAdmin) return;
+    refreshData();
+    const interval = setInterval(() => {
+      refreshData();
+    }, 10000); // Refresh every 10 seconds
+    return () => clearInterval(interval);
+  }, [isAdmin, refreshData]);
 
   // Derived stats — reactive to store changes, no setState needed
   const stats = useMemo(() => {

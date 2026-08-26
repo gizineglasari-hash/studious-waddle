@@ -41,11 +41,12 @@ export function AdminConsultationsView() {
   const { setView, setViewWithConsultation } = useGemasStore();
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const consultations = useAuthStore((s) => s.consultations);
+  const refreshData = useAuthStore((s) => s.refreshData);
 
   const [activeFilter, setActiveFilter] = useState<FilterTab>("Semua");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Redirect if not admin (external calls only — safe in effect)
+  // Redirect if not admin
   useEffect(() => {
     if (!isAdmin) {
       toast({
@@ -56,6 +57,16 @@ export function AdminConsultationsView() {
       setView("admin-login");
     }
   }, [isAdmin, setView, toast]);
+
+  // Auto-refresh consultations from Supabase every 10 seconds
+  useEffect(() => {
+    if (!isAdmin) return;
+    refreshData();
+    const interval = setInterval(() => {
+      refreshData();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [isAdmin, refreshData]);
 
   // All consultations sorted by newest first
   const sortedConsultations = useMemo(() => {

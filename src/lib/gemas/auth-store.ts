@@ -1054,12 +1054,11 @@ export const useAuthStore = create<AuthState>()(
         if (isSupabaseConfigured && supabase) {
           void (async () => {
             try {
-              // Don't send custom ID - let Supabase auto-generate UUID
+              // Use broadcast_consultations table (no RLS, anyone can insert)
               const { data: consultInserted, error: consultError } = await supabase
-                .from("consultations")
+                .from("broadcast_consultations")
                 .insert({
                   user_id: currentUserId,
-                  child_id: newConsultation.childId || null,
                   nama_anak: newConsultation.namaAnak,
                   tanggal_lahir_anak: newConsultation.tanggalLahirAnak,
                   jenis_kelamin_anak: newConsultation.jenisKelaminAnak,
@@ -1071,9 +1070,6 @@ export const useAuthStore = create<AuthState>()(
                   pertanyaan: newConsultation.pertanyaan,
                   jawaban: "",
                   status: "Menunggu Jawaban",
-                  admin_id: null,
-                  admin_name: null,
-                  answered_at: null,
                 })
                 .select()
                 .single();
@@ -1091,19 +1087,6 @@ export const useAuthStore = create<AuthState>()(
                   c.id === consultationId ? { ...c, id: realConsultId } : c
                 ),
               }));
-
-              const { error: notifError } = await supabase
-                .from("notifications")
-                .insert({
-                  user_id: "admin",
-                  consultation_id: realConsultId,
-                  title: adminNotif.title,
-                  message: adminNotif.message,
-                  is_read: false,
-                });
-              if (notifError) {
-                console.warn("[Supabase createConsultation notif] error:", notifError.message);
-              }
             } catch (err) {
               console.warn("[Supabase createConsultation] exception:", err);
               // DON'T revert - keep data in localStorage
@@ -1161,38 +1144,21 @@ export const useAuthStore = create<AuthState>()(
         if (isSupabaseConfigured && supabase) {
           void (async () => {
             try {
+              // Update in broadcast_consultations (no RLS)
               const { error: consultError } = await supabase
-                .from("consultations")
+                .from("broadcast_consultations")
                 .update({
                   jawaban: jawaban.trim(),
                   status: "Sudah Dijawab",
-                  admin_id: adminId,
                   admin_name: adminName,
                   answered_at: now,
-                  updated_at: now,
                 })
                 .eq("id", consultationId);
               if (consultError) {
-                console.error("[Supabase answerConsultation] error:", consultError.message);
-                return;
-              }
-
-              const { error: notifError } = await supabase
-                .from("notifications")
-                .insert({
-                  id: userNotif.id,
-                  user_id: consultation.userId,
-                  consultation_id: consultationId,
-                  title: userNotif.title,
-                  message: userNotif.message,
-                  is_read: false,
-                  created_at: now,
-                });
-              if (notifError) {
-                console.error("[Supabase answerConsultation notif] error:", notifError.message);
+                console.warn("[Supabase answerConsultation] error:", consultError.message);
               }
             } catch (err) {
-              console.error("[Supabase answerConsultation] exception:", err);
+              console.warn("[Supabase answerConsultation] exception:", err);
             }
           })();
         }
@@ -1407,26 +1373,25 @@ export const useAuthStore = create<AuthState>()(
           let consultationRows: ConsultationRow[] = [];
           try {
             if (isAdmin) {
-              // Admins see every consultation.
-              // Note: For default admin (not signed in to Supabase Auth),
-              // this may fail due to RLS. That's OK - we fall back to local data.
+              // Admin reads from broadcast_consultations (no RLS, public read)
               const { data, error } = await supabase
-                .from("consultations")
+                .from("broadcast_consultations")
                 .select("*")
                 .order("created_at", { ascending: false });
               if (error) {
-                console.warn("[Supabase refreshData] consultations (admin):", error.message);
+                console.warn("[Supabase refreshData] broadcast_consultations:", error.message);
               } else if (data) {
                 consultationRows = data as ConsultationRow[];
               }
             } else if (currentUserId && !currentUserId.startsWith("supabase-pending-")) {
+              // User reads their own consultations from broadcast table
               const { data, error } = await supabase
-                .from("consultations")
+                .from("broadcast_consultations")
                 .select("*")
                 .eq("user_id", currentUserId)
                 .order("created_at", { ascending: false });
               if (error) {
-                console.warn("[Supabase refreshData] consultations:", error.message);
+                console.warn("[Supabase refreshData] user consultations:", error.message);
               } else if (data) {
                 consultationRows = data as ConsultationRow[];
               }
