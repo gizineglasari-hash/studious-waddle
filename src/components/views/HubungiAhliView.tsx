@@ -46,68 +46,40 @@ export function HubungiAhliView() {
               {NUTRITIONIST.deskripsi}
             </p>
 
-            {/* Catatan placeholder */}
-            {!hasWhatsApp && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                <div className="text-xs text-amber-800">
-                  <strong>Catatan untuk Admin:</strong> Nomor WhatsApp dan email belum diisi. Silakan edit file <code className="bg-amber-100 px-1 rounded">src/lib/gemas/contacts.ts</code> untuk menambahkan kontak resmi. Jangan gunakan nomor fiktif.
-                </div>
+            {/* Tombol kontak - hanya tampil jika data tersedia */}
+            {(hasWhatsApp || hasEmail) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {hasWhatsApp && (
+                  <Button
+                    size="lg"
+                    asChild
+                    className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-full shadow-md hover:shadow-lg transition-all"
+                  >
+                    <a
+                      href={`https://wa.me/${NUTRITIONIST.whatsappNumber}?text=Halo%20Bu%20${encodeURIComponent(NUTRITIONIST.nama)},%20saya%20ingin%20konsultasi%20mengenai%20gizi%20anak.`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <MessageCircle className="h-5 w-5 mr-2" />
+                      Hubungi via WhatsApp
+                    </a>
+                  </Button>
+                )}
+                {hasEmail && (
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    asChild
+                    className="rounded-full border-blue-300 text-blue-700 hover:bg-blue-50"
+                  >
+                    <a href={`mailto:${NUTRITIONIST.email}`}>
+                      <Mail className="h-5 w-5 mr-2" />
+                      Kirim Email
+                    </a>
+                  </Button>
+                )}
               </div>
             )}
-
-            {/* Tombol kontak */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {hasWhatsApp ? (
-                <Button
-                  size="lg"
-                  asChild
-                  className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-full shadow-md hover:shadow-lg transition-all"
-                >
-                  <a
-                    href={`https://wa.me/${NUTRITIONIST.whatsappNumber}?text=Halo%20Bu%20${encodeURIComponent(NUTRITIONIST.nama)},%20saya%20ingin%20konsultasi%20mengenai%20gizi%20anak.`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <MessageCircle className="h-5 w-5 mr-2" />
-                    Hubungi via WhatsApp
-                  </a>
-                </Button>
-              ) : (
-                <Button
-                  size="lg"
-                  variant="outline"
-                  disabled
-                  className="rounded-full border-gray-200 text-gray-400 cursor-not-allowed"
-                >
-                  <MessageCircle className="h-5 w-5 mr-2" />
-                  WhatsApp Belum Tersedia
-                </Button>
-              )}
-              {hasEmail ? (
-                <Button
-                  size="lg"
-                  variant="outline"
-                  asChild
-                  className="rounded-full border-blue-300 text-blue-700 hover:bg-blue-50"
-                >
-                  <a href={`mailto:${NUTRITIONIST.email}`}>
-                    <Mail className="h-5 w-5 mr-2" />
-                    Kirim Email
-                  </a>
-                </Button>
-              ) : (
-                <Button
-                  size="lg"
-                  variant="outline"
-                  disabled
-                  className="rounded-full border-gray-200 text-gray-400 cursor-not-allowed"
-                >
-                  <Mail className="h-5 w-5 mr-2" />
-                  Email Belum Tersedia
-                </Button>
-              )}
-            </div>
           </CardContent>
         </Card>
 
