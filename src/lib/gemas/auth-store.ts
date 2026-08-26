@@ -921,11 +921,9 @@ export const useAuthStore = create<AuthState>()(
                 .single();
 
               if (error) {
-                console.error("[Supabase addChild] error:", error.message);
-                // Revert optimistic insert on failure.
-                set((state) => ({
-                  children: state.children.filter((c) => c.id !== localId),
-                }));
+                console.warn("[Supabase addChild] error:", error.message);
+                // DON'T revert - keep data in localStorage even if Supabase fails
+                // Data will sync later when RLS is fixed or user logs in to Supabase
               } else if (inserted) {
                 // Replace local ID with real Supabase UUID
                 const realId = (inserted as any).id;
@@ -936,7 +934,8 @@ export const useAuthStore = create<AuthState>()(
                 }));
               }
             } catch (err) {
-              console.error("[Supabase addChild] exception:", err);
+              console.warn("[Supabase addChild] exception:", err);
+              // DON'T revert - keep data in localStorage
             }
           })();
         }
@@ -1080,7 +1079,8 @@ export const useAuthStore = create<AuthState>()(
                 .single();
 
               if (consultError || !consultInserted) {
-                console.error("[Supabase createConsultation] error:", consultError?.message);
+                console.warn("[Supabase createConsultation] error:", consultError?.message);
+                // DON'T revert - keep data in localStorage
                 return;
               }
 
@@ -1102,10 +1102,11 @@ export const useAuthStore = create<AuthState>()(
                   is_read: false,
                 });
               if (notifError) {
-                console.error("[Supabase createConsultation notif] error:", notifError.message);
+                console.warn("[Supabase createConsultation notif] error:", notifError.message);
               }
             } catch (err) {
-              console.error("[Supabase createConsultation] exception:", err);
+              console.warn("[Supabase createConsultation] exception:", err);
+              // DON'T revert - keep data in localStorage
             }
           })();
         }
