@@ -13,6 +13,7 @@ import { TentangView } from "@/components/views/TentangView";
 import { AdminAnalyticsView } from "@/components/views/AdminAnalyticsView";
 import { AnalyticsPengunjungView } from "@/components/views/admin/AnalyticsPengunjungView";
 import { EditWebsiteView } from "@/components/views/admin/EditWebsiteView";
+import { AdminUsersView } from "@/components/views/admin/AdminUsersView";
 import { ErrorBoundary } from "@/components/gemas/ErrorBoundary";
 import { LoginView } from "@/components/views/auth/LoginView";
 import { UserDashboardView } from "@/components/views/auth/UserDashboardView";
@@ -92,7 +93,8 @@ export default function Home() {
     currentView === "admin-consultation-detail" ||
     currentView === "admin-history" ||
     currentView === "admin-analytics-pengunjung" ||
-    currentView === "admin-edit-website";
+    currentView === "admin-edit-website" ||
+    currentView === "admin-users";
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -149,6 +151,11 @@ export default function Home() {
         {currentView === "admin-edit-website" && (
           <ErrorBoundary>
             <EditWebsiteView />
+          </ErrorBoundary>
+        )}
+        {currentView === "admin-users" && (
+          <ErrorBoundary>
+            <AdminUsersView />
           </ErrorBoundary>
         )}
       </main>

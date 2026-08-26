@@ -24,7 +24,8 @@ export type ViewKey =
   | "admin-consultation-detail"
   | "admin-history"
   | "admin-analytics-pengunjung"
-  | "admin-edit-website";
+  | "admin-edit-website"
+  | "admin-users";
 
 export interface MeasurementRecord {
   id: string;

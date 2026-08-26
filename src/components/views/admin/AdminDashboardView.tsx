@@ -231,7 +231,7 @@ export function AdminDashboardView() {
         </div>
 
         {/* Navigation Sidebar - Horizontal on mobile, vertical on desktop */}
-        <div className="mb-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+        <div className="mb-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
           <Button
             onClick={() => setView("admin-dashboard")}
             className="bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs sm:text-sm"
@@ -256,7 +256,16 @@ export function AdminDashboardView() {
             size="sm"
           >
             <BarChart3 className="h-4 w-4 mr-1.5" />
-            Analytics Pengunjung
+            Analytics
+          </Button>
+          <Button
+            onClick={() => setView("admin-users")}
+            variant="outline"
+            className="rounded-xl text-xs sm:text-sm"
+            size="sm"
+          >
+            <Users className="h-4 w-4 mr-1.5" />
+            Data Pengguna
           </Button>
           <Button
             onClick={() => setView("admin-edit-website")}
