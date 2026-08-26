@@ -1,0 +1,1652 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { create } from "zustand";
+     4→     4→import { persist } from "zustand/middleware";
+     5→     5→import { useEffect } from "react";
+     6→     6→import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
+     7→     7→
+     8→     8→// =====================================================
+     9→     9→// TYPES
+    10→    10→// =====================================================
+    11→    11→
+    12→    12→export type UserRole = "user" | "admin";
+    13→    13→
+    14→    14→export interface UserProfile {
+    15→    15→  id: string;
+    16→    16→  namaOrangTua: string;
+    17→    17→  email: string;
+    18→    18→  nomorTelepon: string;
+    19→    19→  alamat: string;
+    20→    20→  passwordHash: string;
+    21→    21→  role: UserRole;
+    22→    22→  createdAt: string;
+    23→    23→  updatedAt: string;
+    24→    24→}
+    25→    25→
+    26→    26→export interface ChildProfile {
+    27→    27→  id: string;
+    28→    28→  userId: string;
+    29→    29→  namaAnak: string;
+    30→    30→  tanggalLahir: string;
+    31→    31→  jenisKelamin: "L" | "P";
+    32→    32→  beratBadan: number;
+    33→    33→  tinggiBadan: number;
+    34→    34→  createdAt: string;
+    35→    35→  updatedAt: string;
+    36→    36→}
+    37→    37→
+    38→    38→export type ConsultationStatus =
+    39→    39→  | "Menunggu Jawaban"
+    40→    40→  | "Sedang Diproses"
+    41→    41→  | "Sudah Dijawab"
+    42→    42→  | "Selesai";
+    43→    43→
+    44→    44→export interface Consultation {
+    45→    45→  id: string;
+    46→    46→  userId: string;
+    47→    47→  childId: string;
+    48→    48→  // Snapshot of child data at time of consultation
+    49→    49→  namaAnak: string;
+    50→    50→  tanggalLahirAnak: string;
+    51→    51→  jenisKelaminAnak: "L" | "P";
+    52→    52→  beratBadanAnak: number;
+    53→    53→  tinggiBadanAnak: number;
+    54→    54→  // Snapshot of parent data
+    55→    55→  namaOrangTua: string;
+    56→    56→  nomorTelepon: string;
+    57→    57→  alamat: string;
+    58→    58→  // Consultation content
+    59→    59→  pertanyaan: string;
+    60→    60→  jawaban: string;
+    61→    61→  status: ConsultationStatus;
+    62→    62→  adminId: string | null;
+    63→    63→  adminName: string | null;
+    64→    64→  createdAt: string;
+    65→    65→  answeredAt: string | null;
+    66→    66→  updatedAt: string;
+    67→    67→}
+    68→    68→
+    69→    69→export interface AppNotification {
+    70→    70→  id: string;
+    71→    71→  userId: string;
+    72→    72→  consultationId: string;
+    73→    73→  title: string;
+    74→    74→  message: string;
+    75→    75→  isRead: boolean;
+    76→    76→  createdAt: string;
+    77→    77→}
+    78→    78→
+    79→    79→// =====================================================
+    80→    80→// SIMPLE PASSWORD HASH (DEMO ONLY - used by localStorage fallback)
+    81→    81→// =====================================================
+    82→    82→
+    83→    83→function simpleHash(password: string): string {
+    84→    84→  // This is NOT cryptographically secure.
+    85→    85→  // For production, use Supabase Auth or NextAuth with proper hashing.
+    86→    86→  let hash = 0;
+    87→    87→  const salt = "GEMAS_2026_SALT_KEY";
+    88→    88→  const str = password + salt;
+    89→    89→  for (let i = 0; i < str.length; i++) {
+    90→    90→    const char = str.charCodeAt(i);
+    91→    91→    hash = (hash << 5) - hash + char;
+    92→    92→    hash = hash & hash;
+    93→    93→  }
+    94→    94→  // Convert to hex and add extra layer
+    95→    95→  const hex = Math.abs(hash).toString(16).padStart(8, "0");
+    96→    96→  return btoa(hex + salt + password.length);
+    97→    97→}
+    98→    98→
+    99→    99→function generateId(): string {
+   100→   100→  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+   101→   101→}
+   102→   102→
+   103→   103→// Generate valid UUID for Supabase tables (all id columns are UUID type)
+   104→   104→function generateUUID(): string {
+   105→   105→  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+   106→   106→    return crypto.randomUUID();
+   107→   107→  }
+   108→   108→  // Fallback for older browsers
+   109→   109→  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+   110→   110→    const r = (Math.random() * 16) | 0;
+   111→   111→    const v = c === "x" ? r : (r & 0x3) | 0x8;
+   112→   112→    return v.toString(16);
+   113→   113→  });
+   114→   114→}
+   115→   115→
+   116→   116→// Pick the right ID generator based on Supabase availability
+   117→   117→function genId(): string {
+   118→   118→  return isSupabaseConfigured ? generateUUID() : generateId();
+   119→   119→}
+   120→   120→
+   121→   121→// =====================================================
+   122→   122→// DEFAULT ADMIN
+   123→   123→// =====================================================
+   124→   124→
+   125→   125→const DEFAULT_ADMIN_EMAIL = "admin@gemas.id";
+   126→   126→const DEFAULT_ADMIN_PASSWORD = "admin2026";
+   127→   127→
+   128→   128→// =====================================================
+   129→   129→// SUPABASE ROW MAPPERS
+   130→   130→// Convert snake_case DB rows to camelCase TypeScript interfaces.
+   131→   131→// All mappers are defensive: missing/null fields fall back to safe defaults.
+   132→   132→// =====================================================
+   133→   133→
+   134→   134→interface ProfileRow {
+   135→   135→  id: string;
+   136→   136→  nama_orang_tua: string | null;
+   137→   137→  email: string | null;
+   138→   138→  nomor_telepon: string | null;
+   139→   139→  alamat: string | null;
+   140→   140→  password_hash: string | null;
+   141→   141→  role: string | null;
+   142→   142→  created_at: string;
+   143→   143→  updated_at: string;
+   144→   144→}
+   145→   145→
+   146→   146→interface ChildRow {
+   147→   147→  id: string;
+   148→   148→  user_id: string;
+   149→   149→  nama_anak: string | null;
+   150→   150→  tanggal_lahir: string | null;
+   151→   151→  jenis_kelamin: string | null;
+   152→   152→  berat_badan: number | null;
+   153→   153→  tinggi_badan: number | null;
+   154→   154→  created_at: string;
+   155→   155→  updated_at: string;
+   156→   156→}
+   157→   157→
+   158→   158→interface ConsultationRow {
+   159→   159→  id: string;
+   160→   160→  user_id: string;
+   161→   161→  child_id: string | null;
+   162→   162→  nama_anak: string | null;
+   163→   163→  tanggal_lahir_anak: string | null;
+   164→   164→  jenis_kelamin_anak: string | null;
+   165→   165→  berat_badan_anak: number | null;
+   166→   166→  tinggi_badan_anak: number | null;
+   167→   167→  nama_orang_tua: string | null;
+   168→   168→  nomor_telepon: string | null;
+   169→   169→  alamat: string | null;
+   170→   170→  pertanyaan: string | null;
+   171→   171→  jawaban: string | null;
+   172→   172→  status: string | null;
+   173→   173→  admin_id: string | null;
+   174→   174→  admin_name: string | null;
+   175→   175→  created_at: string;
+   176→   176→  answered_at: string | null;
+   177→   177→  updated_at: string;
+   178→   178→}
+   179→   179→
+   180→   180→interface NotificationRow {
+   181→   181→  id: string;
+   182→   182→  user_id: string;
+   183→   183→  consultation_id: string;
+   184→   184→  title: string | null;
+   185→   185→  message: string | null;
+   186→   186→  is_read: boolean | null;
+   187→   187→  created_at: string;
+   188→   188→}
+   189→   189→
+   190→   190→function mapProfileRow(row: ProfileRow, fallbackEmail?: string): UserProfile {
+   191→   191→  const role: UserRole =
+   192→   192→    row.role === "admin" ? "admin" : "user";
+   193→   193→  return {
+   194→   194→    id: row.id,
+   195→   195→    namaOrangTua: row.nama_orang_tua ?? "",
+   196→   196→    email: row.email ?? fallbackEmail ?? "",
+   197→   197→    nomorTelepon: row.nomor_telepon ?? "",
+   198→   198→    alamat: row.alamat ?? "",
+   199→   199→    passwordHash: row.password_hash ?? "",
+   200→   200→    role,
+   201→   201→    createdAt: row.created_at ?? new Date().toISOString(),
+   202→   202→    updatedAt: row.updated_at ?? new Date().toISOString(),
+   203→   203→  };
+   204→   204→}
+   205→   205→
+   206→   206→function mapChildRow(row: ChildRow): ChildProfile {
+   207→   207→  return {
+   208→   208→    id: row.id,
+   209→   209→    userId: row.user_id,
+   210→   210→    namaAnak: row.nama_anak ?? "",
+   211→   211→    tanggalLahir: row.tanggal_lahir ?? "",
+   212→   212→    jenisKelamin: row.jenis_kelamin === "P" ? "P" : "L",
+   213→   213→    beratBadan: typeof row.berat_badan === "number" ? row.berat_badan : Number(row.berat_badan) || 0,
+   214→   214→    tinggiBadan:
+   215→   215→      typeof row.tinggi_badan === "number" ? row.tinggi_badan : Number(row.tinggi_badan) || 0,
+   216→   216→    createdAt: row.created_at ?? new Date().toISOString(),
+   217→   217→    updatedAt: row.updated_at ?? new Date().toISOString(),
+   218→   218→  };
+   219→   219→}
+   220→   220→
+   221→   221→function mapConsultationRow(row: ConsultationRow): Consultation {
+   222→   222→  const status: ConsultationStatus =
+   223→   223→    row.status === "Sedang Diproses" ||
+   224→   224→    row.status === "Sudah Dijawab" ||
+   225→   225→    row.status === "Selesai"
+   226→   226→      ? (row.status as ConsultationStatus)
+   227→   227→      : "Menunggu Jawaban";
+   228→   228→  return {
+   229→   229→    id: row.id,
+   230→   230→    userId: row.user_id,
+   231→   231→    childId: row.child_id ?? "",
+   232→   232→    namaAnak: row.nama_anak ?? "",
+   233→   233→    tanggalLahirAnak: row.tanggal_lahir_anak ?? "",
+   234→   234→    jenisKelaminAnak: row.jenis_kelamin_anak === "P" ? "P" : "L",
+   235→   235→    beratBadanAnak:
+   236→   236→      typeof row.berat_badan_anak === "number"
+   237→   237→        ? row.berat_badan_anak
+   238→   238→        : Number(row.berat_badan_anak) || 0,
+   239→   239→    tinggiBadanAnak:
+   240→   240→      typeof row.tinggi_badan_anak === "number"
+   241→   241→        ? row.tinggi_badan_anak
+   242→   242→        : Number(row.tinggi_badan_anak) || 0,
+   243→   243→    namaOrangTua: row.nama_orang_tua ?? "",
+   244→   244→    nomorTelepon: row.nomor_telepon ?? "",
+   245→   245→    alamat: row.alamat ?? "",
+   246→   246→    pertanyaan: row.pertanyaan ?? "",
+   247→   247→    jawaban: row.jawaban ?? "",
+   248→   248→    status,
+   249→   249→    adminId: row.admin_id,
+   250→   250→    adminName: row.admin_name,
+   251→   251→    createdAt: row.created_at ?? new Date().toISOString(),
+   252→   252→    answeredAt: row.answered_at,
+   253→   253→    updatedAt: row.updated_at ?? new Date().toISOString(),
+   254→   254→  };
+   255→   255→}
+   256→   256→
+   257→   257→function mapNotificationRow(row: NotificationRow): AppNotification {
+   258→   258→  return {
+   259→   259→    id: row.id,
+   260→   260→    userId: row.user_id,
+   261→   261→    consultationId: row.consultation_id,
+   262→   262→    title: row.title ?? "",
+   263→   263→    message: row.message ?? "",
+   264→   264→    isRead: row.is_read === true,
+   265→   265→    createdAt: row.created_at ?? new Date().toISOString(),
+   266→   266→  };
+   267→   267→}
+   268→   268→
+   269→   269→// =====================================================
+   270→   270→// AUTH STORE
+   271→   271→// =====================================================
+   272→   272→
+   273→   273→interface AuthState {
+   274→   274→  // Current session
+   275→   275→  currentUserId: string | null;
+   276→   276→  currentAdminId: string | null;
+   277→   277→  isAdmin: boolean;
+   278→   278→
+   279→   279→  // Async-loading / error flags (used by Supabase mode for UX feedback)
+   280→   280→  isAuthLoading: boolean;
+   281→   281→  authError: string | null;
+   282→   282→  lastRefreshedAt: string | null;
+   283→   283→
+   284→   284→  // Data (persisted in localStorage mode; cached in Supabase mode)
+   285→   285→  users: UserProfile[];
+   286→   286→  children: ChildProfile[];
+   287→   287→  consultations: Consultation[];
+   288→   288→  notifications: AppNotification[];
+   289→   289→
+   290→   290→  // Auth actions
+   291→   291→  register: (data: {
+   292→   292→    namaOrangTua: string;
+   293→   293→    email: string;
+   294→   294→    nomorTelepon: string;
+   295→   295→    alamat: string;
+   296→   296→    password: string;
+   297→   297→  }) => { success: boolean; message: string };
+   298→   298→
+   299→   299→  login: (email: string, password: string) => { success: boolean; message: string };
+   300→   300→  logout: () => void;
+   301→   301→
+   302→   302→  adminLogin: (email: string, password: string) => { success: boolean; message: string };
+   303→   303→  adminLogout: () => void;
+   304→   304→
+   305→   305→  // Profile actions
+   306→   306→  updateProfile: (userId: string, data: Partial<UserProfile>) => void;
+   307→   307→  getCurrentUser: () => UserProfile | null;
+   308→   308→
+   309→   309→  // Children actions
+   310→   310→  addChild: (data: Omit<ChildProfile, "id" | "userId" | "createdAt" | "updatedAt">) => { success: boolean; message: string };
+   311→   311→  updateChild: (childId: string, data: Partial<ChildProfile>) => void;
+   312→   312→  getChildrenByUser: (userId: string) => ChildProfile[];
+   313→   313→  getLastChild: (userId: string) => ChildProfile | null;
+   314→   314→
+   315→   315→  // Consultation actions
+   316→   316→  createConsultation: (data: {
+   317→   317→    childId: string;
+   318→   318→    pertanyaan: string;
+   319→   319→  }) => { success: boolean; message: string; consultationId?: string };
+   320→   320→
+   321→   321→  answerConsultation: (
+   322→   322→    consultationId: string,
+   323→   323→    jawaban: string,
+   324→   324→    adminId: string,
+   325→   325→    adminName: string
+   326→   326→  ) => { success: boolean; message: string };
+   327→   327→
+   328→   328→  updateConsultationStatus: (consultationId: string, status: ConsultationStatus) => void;
+   329→   329→
+   330→   330→  getConsultationsByUser: (userId: string) => Consultation[];
+   331→   331→  getConsultationById: (id: string) => Consultation | null;
+   332→   332→  getAllConsultations: () => Consultation[];
+   333→   333→
+   334→   334→  // Notification actions
+   335→   335→  getNotificationsByUser: (userId: string) => AppNotification[];
+   336→   336→  getUnreadNotificationCount: (userId: string) => number;
+   337→   337→  markNotificationRead: (notificationId: string) => void;
+   338→   338→  markAllNotificationsRead: (userId: string) => void;
+   339→   339→
+   340→   340→  // Delete actions (admin)
+   341→   341→  deleteUser: (userId: string) => { success: boolean; message: string };
+   342→   342→  deleteConsultation: (consultationId: string) => { success: boolean; message: string };
+   343→   343→
+   344→   344→  // Stats (for admin)
+   345→   345→  getStats: () => {
+   346→   346→    totalConsultations: number;
+   347→   347→    menungguJawaban: number;
+   348→   348→    sedangDiproses: number;
+   349→   349→    sudahDijawab: number;
+   350→   350→    selesai: number;
+   351→   351→    totalUsers: number;
+   352→   352→  };
+   353→   353→
+   354→   354→  // Supabase-only helpers (no-ops in localStorage mode)
+   355→   355→  restoreSession: () => Promise<void>;
+   356→   356→  refreshData: () => Promise<void>;
+   357→   357→  resetPassword: (email: string) => Promise<{ success: boolean; message: string }>;
+   358→   358→}
+   359→   359→
+   360→   360→// =====================================================
+   361→   361→// STORE IMPLEMENTATION
+   362→   362→//
+   363→   363→// KEY DESIGN PRINCIPLE (per spec rule #6):
+   364→   364→//   "Use async where needed but keep the store interface synchronous
+   365→   365→//    (use internal async, return sync)."
+   366→   366→//
+   367→   367→// All public method signatures stay EXACTLY the same as before (sync return
+   368→   368→// types) so existing callers don't need any changes. When Supabase is
+   369→   369→// configured, methods fire async Supabase operations in the background
+   370→   370→// (fire-and-forget IIFE) and apply optimistic updates to local state
+   371→   371→// immediately. When Supabase is NOT configured, the original localStorage
+   372→   372→// logic runs unchanged.
+   373→   373→//
+   374→   374→// For `login()`/`adminLogin()` specifically, we set the current user/admin
+   375→   375→// id optimistically (to a placeholder id) so the dashboard renders right
+   376→   376→// away. When the async Supabase response arrives, we replace the
+   377→   377→// placeholder with the real user id and call `refreshData()` to populate
+   378→   378→// consultations/notifications/children from the server.
+   379→   379→// =====================================================
+   380→   380→
+   381→   381→export const useAuthStore = create<AuthState>()(
+   382→   382→  persist(
+   383→   383→    (set, get) => ({
+   384→   384→      currentUserId: null,
+   385→   385→      currentAdminId: null,
+   386→   386→      isAdmin: false,
+   387→   387→      isAuthLoading: false,
+   388→   388→      authError: null,
+   389→   389→      lastRefreshedAt: null,
+   390→   390→      users: [],
+   391→   391→      children: [],
+   392→   392→      consultations: [],
+   393→   393→      notifications: [],
+   394→   394→
+   395→   395→      // ============ AUTH ============
+   396→   396→      register: (data) => {
+   397→   397→        const emailLower = data.email.toLowerCase().trim();
+   398→   398→
+   399→   399→        // Sync validation
+   400→   400→        if (!data.namaOrangTua.trim()) {
+   401→   401→          return { success: false, message: "Nama orang tua wajib diisi." };
+   402→   402→        }
+   403→   403→        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLower)) {
+   404→   404→          return { success: false, message: "Format email tidak valid." };
+   405→   405→        }
+   406→   406→        if (data.password.length < 6) {
+   407→   407→          return { success: false, message: "Password minimal 6 karakter." };
+   408→   408→        }
+   409→   409→        if (!data.nomorTelepon.trim()) {
+   410→   410→          return { success: false, message: "Nomor telepon wajib diisi." };
+   411→   411→        }
+   412→   412→
+   413→   413→        if (isSupabaseConfigured && supabase) {
+   414→   414→          // ALSO save to localStorage so user can login immediately
+   415→   415→          // (even if Supabase email confirmation is pending)
+   416→   416→          const now = new Date().toISOString();
+   417→   417→          const localUser: UserProfile = {
+   418→   418→            id: genId(),
+   419→   419→            namaOrangTua: data.namaOrangTua.trim(),
+   420→   420→            email: emailLower,
+   421→   421→            nomorTelepon: data.nomorTelepon.trim(),
+   422→   422→            alamat: data.alamat.trim(),
+   423→   423→            passwordHash: simpleHash(data.password),
+   424→   424→            role: "user",
+   425→   425→            createdAt: now,
+   426→   426→            updatedAt: now,
+   427→   427→          };
+   428→   428→          set((state) => ({ users: [...state.users, localUser] }));
+   429→   429→
+   430→   430→          // Fire signUp to Supabase in background
+   431→   431→          void (async () => {
+   432→   432→            try {
+   433→   433→              const { data: signUpData, error } = await supabase.auth.signUp({
+   434→   434→                email: emailLower,
+   435→   435→                password: data.password,
+   436→   436→                options: {
+   437→   437→                  data: {
+   438→   438→                    nama_orang_tua: data.namaOrangTua.trim(),
+   439→   439→                    nomor_telepon: data.nomorTelepon.trim(),
+   440→   440→                    alamat: data.alamat.trim(),
+   441→   441→                  },
+   442→   442→                },
+   443→   443→              });
+   444→   444→
+   445→   445→              if (error) {
+   446→   446→                console.error("[Supabase register] error:", error.message);
+   447→   447→                return;
+   448→   448→              }
+   449→   449→
+   450→   450→              // Cache the new profile locally so the user can log in
+   451→   451→              // immediately after registration.
+   452→   452→              if (signUpData.user) {
+   453→   453→                const now = new Date().toISOString();
+   454→   454→                const cachedProfile: UserProfile = {
+   455→   455→                  id: signUpData.user.id,
+   456→   456→                  namaOrangTua: data.namaOrangTua.trim(),
+   457→   457→                  email: emailLower,
+   458→   458→                  nomorTelepon: data.nomorTelepon.trim(),
+   459→   459→                  alamat: data.alamat.trim(),
+   460→   460→                  passwordHash: "",
+   461→   461→                  role: "user",
+   462→   462→                  createdAt: signUpData.user.created_at || now,
+   463→   463→                  updatedAt: now,
+   464→   464→                };
+   465→   465→                set((state) => ({
+   466→   466→                  users: [
+   467→   467→                    ...state.users.filter((u) => u.id !== cachedProfile.id),
+   468→   468→                    cachedProfile,
+   469→   469→                  ],
+   470→   470→                }));
+   471→   471→              }
+   472→   472→            } catch (err) {
+   473→   473→              console.error("[Supabase register] exception:", err);
+   474→   474→            }
+   475→   475→          })();
+   476→   476→
+   477→   477→          return { success: true, message: "Registrasi berhasil. Silakan login." };
+   478→   478→        }
+   479→   479→
+   480→   480→        // ----- localStorage fallback -----
+   481→   481→        const { users } = get();
+   482→   482→        if (users.some((u) => u.email.toLowerCase() === emailLower)) {
+   483→   483→          return { success: false, message: "Email sudah terdaftar. Silakan login." };
+   484→   484→        }
+   485→   485→
+   486→   486→        const newUser: UserProfile = {
+   487→   487→          id: genId(),
+   488→   488→          namaOrangTua: data.namaOrangTua.trim(),
+   489→   489→          email: emailLower,
+   490→   490→          nomorTelepon: data.nomorTelepon.trim(),
+   491→   491→          alamat: data.alamat.trim(),
+   492→   492→          passwordHash: simpleHash(data.password),
+   493→   493→          role: "user",
+   494→   494→          createdAt: new Date().toISOString(),
+   495→   495→          updatedAt: new Date().toISOString(),
+   496→   496→        };
+   497→   497→
+   498→   498→        set((state) => ({ users: [...state.users, newUser] }));
+   499→   499→        return { success: true, message: "Registrasi berhasil. Silakan login." };
+   500→   500→      },
+   501→   501→
+   502→   502→      login: (email, password) => {
+   503→   503→        const emailLower = email.toLowerCase().trim();
+   504→   504→
+   505→   505→        if (!emailLower) {
+   506→   506→          return { success: false, message: "Email wajib diisi." };
+   507→   507→        }
+   508→   508→        if (!password) {
+   509→   509→          return { success: false, message: "Password wajib diisi." };
+   510→   510→        }
+   511→   511→
+   512→   512→        if (isSupabaseConfigured && supabase) {
+   513→   513→          // For Supabase mode: use SYNCHRONOUS fallback approach
+   514→   514→          // Try to sign in synchronously using a workaround:
+   515→   515→          // Set loading state, then let the async complete
+   516→   516→          // BUT return a special message that tells the UI to wait
+   517→   517→
+   518→   518→          // Actually, we can't make this truly synchronous.
+   519→   519→          // Best approach: use localStorage fallback for immediate login,
+   520→   520→          // then sync with Supabase in background.
+   521→   521→
+   522→   522→          // Check if user exists in localStorage (from previous registration)
+   523→   523→          const { users } = get();
+   524→   524→          const localUser = users.find(
+   525→   525→            (u) => u.email.toLowerCase() === emailLower && u.role === "user"
+   526→   526→          );
+   527→   527→
+   528→   528→          if (localUser && localUser.passwordHash === simpleHash(password)) {
+   529→   529→            // Found in localStorage - login immediately
+   530→   530→            set({
+   531→   531→              currentUserId: localUser.id,
+   532→   532→              isAdmin: false,
+   533→   533→              isAuthLoading: false,
+   534→   534→              authError: null,
+   535→   535→            });
+   536→   536→
+   537→   537→            // Sync with Supabase in background
+   538→   538→            void (async () => {
+   539→   539→              try {
+   540→   540→                const { data: signInData, error } =
+   541→   541→                  await supabase.auth.signInWithPassword({
+   542→   542→                    email: emailLower,
+   543→   543→                    password,
+   544→   544→                  });
+   545→   545→
+   546→   546→                if (error) {
+   547→   547→                  console.warn("[Supabase login sync] error:", error.message);
+   548→   548→                  // Don't clear local login - user is already in
+   549→   549→                  return;
+   550→   550→                }
+   551→   551→
+   552→   552→                if (signInData.user) {
+   553→   553→                  // Update with Supabase UUID
+   554→   554→                  set({ currentUserId: signInData.user.id });
+   555→   555→                  await get().refreshData();
+   556→   556→                }
+   557→   557→              } catch (err) {
+   558→   558→                console.warn("[Supabase login sync] exception:", err);
+   559→   559→              }
+   560→   560→            })();
+   561→   561→
+   562→   562→            return { success: true, message: "Login berhasil." };
+   563→   563→          }
+   564→   564→
+   565→   565→          // Not found in localStorage - try Supabase directly
+   566→   566→          // We need to return synchronously, so we'll use a different approach:
+   567→   567→          // Set loading state and return a "pending" message
+   568→   568→          set({ isAuthLoading: true, authError: null });
+   569→   569→
+   570→   570→          // Fire async login
+   571→   571→          void (async () => {
+   572→   572→            try {
+   573→   573→              const { data: signInData, error } =
+   574→   574→                await supabase.auth.signInWithPassword({
+   575→   575→                  email: emailLower,
+   576→   576→                  password,
+   577→   577→                });
+   578→   578→
+   579→   579→              if (error || !signInData.user) {
+   580→   580→                console.error("[Supabase login] error:", error?.message);
+   581→   581→                set({
+   582→   582→                  currentUserId: null,
+   583→   583→                  isAuthLoading: false,
+   584→   584→                  authError: error?.message || "Login gagal.",
+   585→   585→                });
+   586→   586→                return;
+   587→   587→              }
+   588→   588→
+   589→   589→              const userId = signInData.user.id;
+   590→   590→
+   591→   591→              // Fetch profile
+   592→   592→              let profile: UserProfile | null = null;
+   593→   593→              try {
+   594→   594→                const { data: profileRow } = await supabase
+   595→   595→                  .from("profiles")
+   596→   596→                  .select("*")
+   597→   597→                  .eq("id", userId)
+   598→   598→                  .maybeSingle();
+   599→   599→
+   600→   600→                if (profileRow) {
+   601→   601→                  profile = mapProfileRow(profileRow as ProfileRow, signInData.user.email);
+   602→   602→                } else {
+   603→   603→                  profile = {
+   604→   604→                    id: userId,
+   605→   605→                    namaOrangTua: (signInData.user.user_metadata?.nama_orang_tua as string) || "",
+   606→   606→                    email: signInData.user.email || emailLower,
+   607→   607→                    nomorTelepon: (signInData.user.user_metadata?.nomor_telepon as string) || "",
+   608→   608→                    alamat: (signInData.user.user_metadata?.alamat as string) || "",
+   609→   609→                    passwordHash: "",
+   610→   610→                    role: "user",
+   611→   611→                    createdAt: signInData.user.created_at || new Date().toISOString(),
+   612→   612→                    updatedAt: new Date().toISOString(),
+   613→   613→                  };
+   614→   614→                }
+   615→   615→              } catch (err) {
+   616→   616→                console.warn("[Supabase login] profile fetch exception:", err);
+   617→   617→              }
+   618→   618→
+   619→   619→              set((state) => ({
+   620→   620→                currentUserId: userId,
+   621→   621→                isAuthLoading: false,
+   622→   622→                authError: null,
+   623→   623→                users: profile
+   624→   624→                  ? [
+   625→   625→                      ...state.users.filter((u) => u.id !== userId),
+   626→   626→                      profile!,
+   627→   627→                    ]
+   628→   628→                  : state.users,
+   629→   629→              }));
+   630→   630→
+   631→   631→              await get().refreshData();
+   632→   632→            } catch (err) {
+   633→   633→              console.error("[Supabase login] exception:", err);
+   634→   634→              set({
+   635→   635→                currentUserId: null,
+   636→   636→                isAuthLoading: false,
+   637→   637→                authError: err instanceof Error ? err.message : "Login gagal.",
+   638→   638→              });
+   639→   639→            }
+   640→   640→          })();
+   641→   641→
+   642→   642→          // Return pending - LoginView needs to handle this
+   643→   643→          return { success: true, message: "Login sedang diproses..." };
+   644→   644→        }
+   645→   645→
+   646→   646→        // ----- localStorage fallback -----
+   647→   647→        const { users } = get();
+   648→   648→        const user = users.find((u) => u.email.toLowerCase() === emailLower);
+   649→   649→        if (!user) {
+   650→   650→          return { success: false, message: "Email tidak terdaftar." };
+   651→   651→        }
+   652→   652→        if (user.passwordHash !== simpleHash(password)) {
+   653→   653→          return { success: false, message: "Password salah." };
+   654→   654→        }
+   655→   655→        set({ currentUserId: user.id, isAdmin: false });
+   656→   656→        return { success: true, message: "Login berhasil." };
+   657→   657→      },
+   658→   658→
+   659→   659→      logout: () => {
+   660→   660→        if (isSupabaseConfigured && supabase) {
+   661→   661→          // Fire signOut in the background; clear local state synchronously
+   662→   662→          // so the UI reacts instantly.
+   663→   663→          void (async () => {
+   664→   664→            try {
+   665→   665→              await supabase.auth.signOut();
+   666→   666→            } catch (err) {
+   667→   667→              console.error("[Supabase logout] exception:", err);
+   668→   668→            }
+   669→   669→          })();
+   670→   670→        }
+   671→   671→        set({ currentUserId: null, isAdmin: false, authError: null });
+   672→   672→      },
+   673→   673→
+   674→   674→      adminLogin: (email, password) => {
+   675→   675→        const emailLower = email.toLowerCase().trim();
+   676→   676→
+   677→   677→        // Check default admin credentials (works in both modes).
+   678→   678→        const isDefaultAdmin =
+   679→   679→          emailLower === DEFAULT_ADMIN_EMAIL && password === DEFAULT_ADMIN_PASSWORD;
+   680→   680→
+   681→   681→        if (isDefaultAdmin) {
+   682→   682→          // Default admin: set local state WITHOUT trying Supabase Auth
+   683→   683→          // (admin@gemas.id doesn't exist in Supabase Auth - it's a local admin)
+   684→   684→          const adminId = "admin-default";
+   685→   685→          const adminProfile: UserProfile = {
+   686→   686→            id: adminId,
+   687→   687→            namaOrangTua: "Administrator GEMAS",
+   688→   688→            email: emailLower,
+   689→   689→            nomorTelepon: "",
+   690→   690→            alamat: "",
+   691→   691→            passwordHash: simpleHash(password),
+   692→   692→            role: "admin",
+   693→   693→            createdAt: new Date().toISOString(),
+   694→   694→            updatedAt: new Date().toISOString(),
+   695→   695→          };
+   696→   696→
+   697→   697→          set((state) => ({
+   698→   698→            users: [...state.users.filter((u) => u.id !== adminId), adminProfile],
+   699→   699→            currentAdminId: adminId,
+   700→   700→            isAdmin: true,
+   701→   701→            currentUserId: null,
+   702→   702→            authError: null,
+   703→   703→          }));
+   704→   704→
+   705→   705→          // Fetch consultations from Supabase if available
+   706→   706→          if (isSupabaseConfigured && supabase) {
+   707→   707→            void (async () => {
+   708→   708→              try {
+   709→   709→                await get().refreshData();
+   710→   710→              } catch (err) {
+   711→   711→                console.error("[adminLogin] refreshData exception:", err);
+   712→   712→              }
+   713→   713→            })();
+   714→   714→          }
+   715→   715→
+   716→   716→          return { success: true, message: "Login admin berhasil." };
+   717→   717→        }
+   718→   718→
+   719→   719→        // Non-default admin: try Supabase Auth if configured
+   720→   720→        if (isSupabaseConfigured && supabase) {
+   721→   721→          void (async () => {
+   722→   722→            try {
+   723→   723→              const { data: signInData, error } = await supabase.auth.signInWithPassword({
+   724→   724→                email: emailLower,
+   725→   725→                password,
+   726→   726→              });
+   727→   727→              if (error) {
+   728→   728→                console.error("[Supabase adminLogin] error:", error.message);
+   729→   729→                return;
+   730→   730→              }
+   731→   731→              if (signInData.user) {
+   732→   732→                const { data: profile } = await supabase
+   733→   733→                  .from("profiles")
+   734→   734→                  .select("*")
+   735→   735→                  .eq("id", signInData.user.id)
+   736→   736→                  .maybeSingle();
+   737→   737→
+   738→   738→                if (profile && profile.role === "admin") {
+   739→   739→                  set({
+   740→   740→                    currentAdminId: signInData.user.id,
+   741→   741→                    isAdmin: true,
+   742→   742→                    currentUserId: null,
+   743→   743→                  });
+   744→   744→                  await get().refreshData();
+   745→   745→                }
+   746→   746→              }
+   747→   747→            } catch (err) {
+   748→   748→              console.error("[Supabase adminLogin] exception:", err);
+   749→   749→            }
+   750→   750→          })();
+   751→   751→
+   752→   752→          const { users } = get();
+   753→   753→          let admin = users.find((u) => u.email.toLowerCase() === emailLower);
+   754→   754→          if (!admin) {
+   755→   755→            admin = {
+   756→   756→              id: genId(),
+   757→   757→              namaOrangTua: "Administrator GEMAS",
+   758→   758→              email: emailLower,
+   759→   759→              nomorTelepon: "",
+   760→   760→              alamat: "",
+   761→   761→              passwordHash: simpleHash(password),
+   762→   762→              role: "admin",
+   763→   763→              createdAt: new Date().toISOString(),
+   764→   764→              updatedAt: new Date().toISOString(),
+   765→   765→            };
+   766→   766→            set((state) => ({ users: [...state.users, admin!] }));
+   767→   767→          }
+   768→   768→
+   769→   769→          set({
+   770→   770→            currentAdminId: admin.id,
+   771→   771→            isAdmin: true,
+   772→   772→            currentUserId: null,
+   773→   773→            authError: null,
+   774→   774→          });
+   775→   775→          return { success: true, message: "Login admin berhasil." };
+   776→   776→        }
+   777→   777→
+   778→   778→        // ----- localStorage fallback -----
+   779→   779→        if (isDefaultAdmin) {
+   780→   780→          const { users } = get();
+   781→   781→          let admin = users.find((u) => u.email.toLowerCase() === emailLower);
+   782→   782→          if (!admin) {
+   783→   783→            admin = {
+   784→   784→              id: "admin-default",
+   785→   785→              namaOrangTua: "Administrator GEMAS",
+   786→   786→              email: emailLower,
+   787→   787→              nomorTelepon: "",
+   788→   788→              alamat: "",
+   789→   789→              passwordHash: simpleHash(password),
+   790→   790→              role: "admin",
+   791→   791→              createdAt: new Date().toISOString(),
+   792→   792→              updatedAt: new Date().toISOString(),
+   793→   793→            };
+   794→   794→            set((state) => ({ users: [...state.users, admin!] }));
+   795→   795→          }
+   796→   796→          set({
+   797→   797→            currentAdminId: admin.id,
+   798→   798→            isAdmin: true,
+   799→   799→            currentUserId: null,
+   800→   800→          });
+   801→   801→          return { success: true, message: "Login admin berhasil." };
+   802→   802→        }
+   803→   803→
+   804→   804→        // Also check if any user has admin role.
+   805→   805→        const { users } = get();
+   806→   806→        const admin = users.find(
+   807→   807→          (u) => u.role === "admin" && u.email.toLowerCase() === emailLower
+   808→   808→        );
+   809→   809→        if (admin && admin.passwordHash === simpleHash(password)) {
+   810→   810→          set({ currentAdminId: admin.id, isAdmin: true, currentUserId: null });
+   811→   811→          return { success: true, message: "Login admin berhasil." };
+   812→   812→        }
+   813→   813→
+   814→   814→        return { success: false, message: "Email atau password admin salah." };
+   815→   815→      },
+   816→   816→
+   817→   817→      adminLogout: () => {
+   818→   818→        if (isSupabaseConfigured && supabase) {
+   819→   819→          void (async () => {
+   820→   820→            try {
+   821→   821→              await supabase.auth.signOut();
+   822→   822→            } catch (err) {
+   823→   823→              console.error("[Supabase adminLogout] exception:", err);
+   824→   824→            }
+   825→   825→          })();
+   826→   826→        }
+   827→   827→        set({ currentAdminId: null, isAdmin: false, authError: null });
+   828→   828→      },
+   829→   829→
+   830→   830→      // ============ PROFILE ============
+   831→   831→      updateProfile: (userId, data) => {
+   832→   832→        const now = new Date().toISOString();
+   833→   833→        const updatedFields: Partial<UserProfile> = { ...data, updatedAt: now };
+   834→   834→
+   835→   835→        // Optimistic local update.
+   836→   836→        set((state) => ({
+   837→   837→          users: state.users.map((u) =>
+   838→   838→            u.id === userId ? { ...u, ...updatedFields } : u
+   839→   839→          ),
+   840→   840→        }));
+   841→   841→
+   842→   842→        if (isSupabaseConfigured && supabase) {
+   843→   843→          void (async () => {
+   844→   844→            try {
+   845→   845→              const update: Record<string, unknown> = { updated_at: now };
+   846→   846→              if (data.namaOrangTua !== undefined) update.nama_orang_tua = data.namaOrangTua;
+   847→   847→              if (data.nomorTelepon !== undefined) update.nomor_telepon = data.nomorTelepon;
+   848→   848→              if (data.alamat !== undefined) update.alamat = data.alamat;
+   849→   849→              if (data.role !== undefined) update.role = data.role;
+   850→   850→
+   851→   851→              const { error } = await supabase
+   852→   852→                .from("profiles")
+   853→   853→                .update(update)
+   854→   854→                .eq("id", userId);
+   855→   855→              if (error) {
+   856→   856→                console.error("[Supabase updateProfile] error:", error.message);
+   857→   857→              }
+   858→   858→            } catch (err) {
+   859→   859→              console.error("[Supabase updateProfile] exception:", err);
+   860→   860→            }
+   861→   861→          })();
+   862→   862→        }
+   863→   863→      },
+   864→   864→
+   865→   865→      getCurrentUser: () => {
+   866→   866→        const { currentUserId, users } = get();
+   867→   867→        if (!currentUserId) return null;
+   868→   868→        return users.find((u) => u.id === currentUserId) || null;
+   869→   869→      },
+   870→   870→
+   871→   871→      // ============ CHILDREN ============
+   872→   872→      addChild: (data) => {
+   873→   873→        const { currentUserId } = get();
+   874→   874→        if (!currentUserId) {
+   875→   875→          return { success: false, message: "Anda harus login terlebih dahulu." };
+   876→   876→        }
+   877→   877→
+   878→   878→        // Check if currentUserId is still a placeholder (login not complete)
+   879→   879→        if (currentUserId.startsWith("supabase-pending-")) {
+   880→   880→          return { success: false, message: "Sedang memuat data pengguna, coba lagi dalam beberapa detik." };
+   881→   881→        }
+   882→   882→
+   883→   883→        // Sync validation
+   884→   884→        if (!data.namaAnak.trim()) {
+   885→   885→          return { success: false, message: "Nama anak wajib diisi." };
+   886→   886→        }
+   887→   887→        if (!data.tanggalLahir) {
+   888→   888→          return { success: false, message: "Tanggal lahir wajib diisi." };
+   889→   889→        }
+   890→   890→        if (data.beratBadan <= 0 || data.beratBadan > 100) {
+   891→   891→          return { success: false, message: "Berat badan tidak valid." };
+   892→   892→        }
+   893→   893→        if (data.tinggiBadan <= 0 || data.tinggiBadan > 220) {
+   894→   894→          return { success: false, message: "Tinggi badan tidak valid." };
+   895→   895→        }
+   896→   896→
+   897→   897→        const now = new Date().toISOString();
+   898→   898→        const localId = genId();
+   899→   899→        const newChild: ChildProfile = {
+   900→   900→          ...data,
+   901→   901→          id: localId,
+   902→   902→          userId: currentUserId,
+   903→   903→          createdAt: now,
+   904→   904→          updatedAt: now,
+   905→   905→        };
+   906→   906→
+   907→   907→        // Optimistic local update.
+   908→   908→        set((state) => ({ children: [...state.children, newChild] }));
+   909→   909→
+   910→   910→        if (isSupabaseConfigured && supabase) {
+   911→   911→          void (async () => {
+   912→   912→            try {
+   913→   913→              // Don't send custom ID - let Supabase auto-generate UUID
+   914→   914→              const { data: inserted, error } = await supabase
+   915→   915→                .from("children")
+   916→   916→                .insert({
+   917→   917→                  user_id: currentUserId,
+   918→   918→                  nama_anak: newChild.namaAnak,
+   919→   919→                  tanggal_lahir: newChild.tanggalLahir,
+   920→   920→                  jenis_kelamin: newChild.jenisKelamin,
+   921→   921→                  berat_badan: newChild.beratBadan,
+   922→   922→                  tinggi_badan: newChild.tinggiBadan,
+   923→   923→                })
+   924→   924→                .select()
+   925→   925→                .single();
+   926→   926→
+   927→   927→              if (error) {
+   928→   928→                console.warn("[Supabase addChild] error:", error.message);
+   929→   929→                // DON'T revert - keep data in localStorage even if Supabase fails
+   930→   930→                // Data will sync later when RLS is fixed or user logs in to Supabase
+   931→   931→              } else if (inserted) {
+   932→   932→                // Replace local ID with real Supabase UUID
+   933→   933→                const realId = (inserted as any).id;
+   934→   934→                set((state) => ({
+   935→   935→                  children: state.children.map((c) =>
+   936→   936→                    c.id === localId ? { ...c, id: realId } : c
+   937→   937→                  ),
+   938→   938→                }));
+   939→   939→              }
+   940→   940→            } catch (err) {
+   941→   941→              console.warn("[Supabase addChild] exception:", err);
+   942→   942→              // DON'T revert - keep data in localStorage
+   943→   943→            }
+   944→   944→          })();
+   945→   945→        }
+   946→   946→
+   947→   947→        return { success: true, message: "Data anak berhasil disimpan." };
+   948→   948→      },
+   949→   949→
+   950→   950→      updateChild: (childId, data) => {
+   951→   951→        const now = new Date().toISOString();
+   952→   952→        const updatedFields: Partial<ChildProfile> = { ...data, updatedAt: now };
+   953→   953→
+   954→   954→        set((state) => ({
+   955→   955→          children: state.children.map((c) =>
+   956→   956→            c.id === childId ? { ...c, ...updatedFields } : c
+   957→   957→          ),
+   958→   958→        }));
+   959→   959→
+   960→   960→        if (isSupabaseConfigured && supabase) {
+   961→   961→          void (async () => {
+   962→   962→            try {
+   963→   963→              const update: Record<string, unknown> = { updated_at: now };
+   964→   964→              if (data.namaAnak !== undefined) update.nama_anak = data.namaAnak;
+   965→   965→              if (data.tanggalLahir !== undefined) update.tanggal_lahir = data.tanggalLahir;
+   966→   966→              if (data.jenisKelamin !== undefined) update.jenis_kelamin = data.jenisKelamin;
+   967→   967→              if (data.beratBadan !== undefined) update.berat_badan = data.beratBadan;
+   968→   968→              if (data.tinggiBadan !== undefined) update.tinggi_badan = data.tinggiBadan;
+   969→   969→
+   970→   970→              const { error } = await supabase
+   971→   971→                .from("children")
+   972→   972→                .update(update)
+   973→   973→                .eq("id", childId);
+   974→   974→              if (error) {
+   975→   975→                console.error("[Supabase updateChild] error:", error.message);
+   976→   976→              }
+   977→   977→            } catch (err) {
+   978→   978→              console.error("[Supabase updateChild] exception:", err);
+   979→   979→            }
+   980→   980→          })();
+   981→   981→        }
+   982→   982→      },
+   983→   983→
+   984→   984→      getChildrenByUser: (userId) => {
+   985→   985→        return get().children.filter((c) => c.userId === userId);
+   986→   986→      },
+   987→   987→
+   988→   988→      getLastChild: (userId) => {
+   989→   989→        const children = get().children.filter((c) => c.userId === userId);
+   990→   990→        if (children.length === 0) return null;
+   991→   991→        return children.sort((a, b) =>
+   992→   992→          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+   993→   993→        )[0];
+   994→   994→      },
+   995→   995→
+   996→   996→      // ============ CONSULTATIONS ============
+   997→   997→      createConsultation: (data) => {
+   998→   998→        const { currentUserId, children, users } = get();
+   999→   999→        if (!currentUserId) {
+  1000→  1000→          return { success: false, message: "Anda harus login terlebih dahulu." };
+  1001→  1001→        }
+  1002→  1002→
+  1003→  1003→        const child = children.find((c) => c.id === data.childId && c.userId === currentUserId);
+  1004→  1004→        if (!child) {
+  1005→  1005→          return { success: false, message: "Data anak tidak ditemukan." };
+  1006→  1006→        }
+  1007→  1007→
+  1008→  1008→        const user = users.find((u) => u.id === currentUserId);
+  1009→  1009→        if (!user) {
+  1010→  1010→          return { success: false, message: "Data pengguna tidak ditemukan." };
+  1011→  1011→        }
+  1012→  1012→
+  1013→  1013→        if (!data.pertanyaan.trim() || data.pertanyaan.trim().length < 10) {
+  1014→  1014→          return { success: false, message: "Pertanyaan minimal 10 karakter." };
+  1015→  1015→        }
+  1016→  1016→
+  1017→  1017→        const consultationId = genId();
+  1018→  1018→        const now = new Date().toISOString();
+  1019→  1019→
+  1020→  1020→        const newConsultation: Consultation = {
+  1021→  1021→          id: consultationId,
+  1022→  1022→          userId: currentUserId,
+  1023→  1023→          childId: child.id,
+  1024→  1024→          namaAnak: child.namaAnak,
+  1025→  1025→          tanggalLahirAnak: child.tanggalLahir,
+  1026→  1026→          jenisKelaminAnak: child.jenisKelamin,
+  1027→  1027→          beratBadanAnak: child.beratBadan,
+  1028→  1028→          tinggiBadanAnak: child.tinggiBadan,
+  1029→  1029→          namaOrangTua: user.namaOrangTua,
+  1030→  1030→          nomorTelepon: user.nomorTelepon,
+  1031→  1031→          alamat: user.alamat,
+  1032→  1032→          pertanyaan: data.pertanyaan.trim(),
+  1033→  1033→          jawaban: "",
+  1034→  1034→          status: "Menunggu Jawaban",
+  1035→  1035→          adminId: null,
+  1036→  1036→          adminName: null,
+  1037→  1037→          createdAt: now,
+  1038→  1038→          answeredAt: null,
+  1039→  1039→          updatedAt: now,
+  1040→  1040→        };
+  1041→  1041→
+  1042→  1042→        const adminNotif: AppNotification = {
+  1043→  1043→          id: genId(),
+  1044→  1044→          userId: "admin",
+  1045→  1045→          consultationId,
+  1046→  1046→          title: "Konsultasi Baru",
+  1047→  1047→          message: `Orang tua ${user.namaOrangTua} mengirimkan konsultasi untuk anak bernama ${child.namaAnak}.`,
+  1048→  1048→          isRead: false,
+  1049→  1049→          createdAt: now,
+  1050→  1050→        };
+  1051→  1051→
+  1052→  1052→        // Optimistic local updates.
+  1053→  1053→        set((state) => ({
+  1054→  1054→          consultations: [newConsultation, ...state.consultations],
+  1055→  1055→          notifications: [adminNotif, ...state.notifications],
+  1056→  1056→        }));
+  1057→  1057→
+  1058→  1058→        if (isSupabaseConfigured && supabase) {
+  1059→  1059→          void (async () => {
+  1060→  1060→            try {
+  1061→  1061→              // Use broadcast_consultations table (no RLS, anyone can insert)
+  1062→  1062→              const { data: consultInserted, error: consultError } = await supabase
+  1063→  1063→                .from("broadcast_consultations")
+  1064→  1064→                .insert({
+  1065→  1065→                  user_id: currentUserId,
+  1066→  1066→                  nama_anak: newConsultation.namaAnak,
+  1067→  1067→                  tanggal_lahir_anak: newConsultation.tanggalLahirAnak,
+  1068→  1068→                  jenis_kelamin_anak: newConsultation.jenisKelaminAnak,
+  1069→  1069→                  berat_badan_anak: newConsultation.beratBadanAnak,
+  1070→  1070→                  tinggi_badan_anak: newConsultation.tinggiBadanAnak,
+  1071→  1071→                  nama_orang_tua: newConsultation.namaOrangTua,
+  1072→  1072→                  nomor_telepon: newConsultation.nomorTelepon,
+  1073→  1073→                  alamat: newConsultation.alamat,
+  1074→  1074→                  pertanyaan: newConsultation.pertanyaan,
+  1075→  1075→                  jawaban: "",
+  1076→  1076→                  status: "Menunggu Jawaban",
+  1077→  1077→                })
+  1078→  1078→                .select()
+  1079→  1079→                .single();
+  1080→  1080→
+  1081→  1081→              if (consultError || !consultInserted) {
+  1082→  1082→                console.warn("[Supabase createConsultation] error:", consultError?.message);
+  1083→  1083→                // DON'T revert - keep data in localStorage
+  1084→  1084→                return;
+  1085→  1085→              }
+  1086→  1086→
+  1087→  1087→              // Replace local ID with real Supabase UUID
+  1088→  1088→              const realConsultId = (consultInserted as any).id;
+  1089→  1089→              set((state) => ({
+  1090→  1090→                consultations: state.consultations.map((c) =>
+  1091→  1091→                  c.id === consultationId ? { ...c, id: realConsultId } : c
+  1092→  1092→                ),
+  1093→  1093→              }));
+  1094→  1094→            } catch (err) {
+  1095→  1095→              console.warn("[Supabase createConsultation] exception:", err);
+  1096→  1096→              // DON'T revert - keep data in localStorage
+  1097→  1097→            }
+  1098→  1098→          })();
+  1099→  1099→        }
+  1100→  1100→
+  1101→  1101→        return { success: true, message: "Konsultasi berhasil dikirim.", consultationId };
+  1102→  1102→      },
+  1103→  1103→
+  1104→  1104→      answerConsultation: (consultationId, jawaban, adminId, adminName) => {
+  1105→  1105→        const { consultations } = get();
+  1106→  1106→        const consultation = consultations.find((c) => c.id === consultationId);
+  1107→  1107→        if (!consultation) {
+  1108→  1108→          return { success: false, message: "Konsultasi tidak ditemukan." };
+  1109→  1109→        }
+  1110→  1110→
+  1111→  1111→        if (!jawaban.trim() || jawaban.trim().length < 10) {
+  1112→  1112→          return { success: false, message: "Jawaban minimal 10 karakter." };
+  1113→  1113→        }
+  1114→  1114→
+  1115→  1115→        const now = new Date().toISOString();
+  1116→  1116→
+  1117→  1117→        // Optimistic local update on the consultation.
+  1118→  1118→        set((state) => ({
+  1119→  1119→          consultations: state.consultations.map((c) =>
+  1120→  1120→            c.id === consultationId
+  1121→  1121→              ? {
+  1122→  1122→                  ...c,
+  1123→  1123→                  jawaban: jawaban.trim(),
+  1124→  1124→                  status: "Sudah Dijawab" as ConsultationStatus,
+  1125→  1125→                  adminId,
+  1126→  1126→                  adminName,
+  1127→  1127→                  answeredAt: now,
+  1128→  1128→                  updatedAt: now,
+  1129→  1129→                }
+  1130→  1130→              : c
+  1131→  1131→          ),
+  1132→  1132→        }));
+  1133→  1133→
+  1134→  1134→        // Notification to the parent user.
+  1135→  1135→        const userNotif: AppNotification = {
+  1136→  1136→          id: genId(),
+  1137→  1137→          userId: consultation.userId,
+  1138→  1138→          consultationId,
+  1139→  1139→          title: "Konsultasi Dijawab",
+  1140→  1140→          message: `Konsultasi Anda untuk ${consultation.namaAnak} telah dijawab oleh ahli gizi.`,
+  1141→  1141→          isRead: false,
+  1142→  1142→          createdAt: now,
+  1143→  1143→        };
+  1144→  1144→        set((state) => ({
+  1145→  1145→          notifications: [userNotif, ...state.notifications],
+  1146→  1146→        }));
+  1147→  1147→
+  1148→  1148→        if (isSupabaseConfigured && supabase) {
+  1149→  1149→          void (async () => {
+  1150→  1150→            try {
+  1151→  1151→              // Update in broadcast_consultations (no RLS)
+  1152→  1152→              const { error: consultError } = await supabase
+  1153→  1153→                .from("broadcast_consultations")
+  1154→  1154→                .update({
+  1155→  1155→                  jawaban: jawaban.trim(),
+  1156→  1156→                  status: "Sudah Dijawab",
+  1157→  1157→                  admin_name: adminName,
+  1158→  1158→                  answered_at: now,
+  1159→  1159→                })
+  1160→  1160→                .eq("id", consultationId);
+  1161→  1161→              if (consultError) {
+  1162→  1162→                console.warn("[Supabase answerConsultation] error:", consultError.message);
+  1163→  1163→              }
+  1164→  1164→            } catch (err) {
+  1165→  1165→              console.warn("[Supabase answerConsultation] exception:", err);
+  1166→  1166→            }
+  1167→  1167→          })();
+  1168→  1168→        }
+  1169→  1169→
+  1170→  1170→        return { success: true, message: "Jawaban berhasil dikirim." };
+  1171→  1171→      },
+  1172→  1172→
+  1173→  1173→      updateConsultationStatus: (consultationId, status) => {
+  1174→  1174→        const now = new Date().toISOString();
+  1175→  1175→        set((state) => ({
+  1176→  1176→          consultations: state.consultations.map((c) =>
+  1177→  1177→            c.id === consultationId ? { ...c, status, updatedAt: now } : c
+  1178→  1178→          ),
+  1179→  1179→        }));
+  1180→  1180→
+  1181→  1181→        if (isSupabaseConfigured && supabase) {
+  1182→  1182→          void (async () => {
+  1183→  1183→            try {
+  1184→  1184→              const { error } = await supabase
+  1185→  1185→                .from("consultations")
+  1186→  1186→                .update({ status, updated_at: now })
+  1187→  1187→                .eq("id", consultationId);
+  1188→  1188→              if (error) {
+  1189→  1189→                console.error("[Supabase updateConsultationStatus] error:", error.message);
+  1190→  1190→              }
+  1191→  1191→            } catch (err) {
+  1192→  1192→              console.error("[Supabase updateConsultationStatus] exception:", err);
+  1193→  1193→            }
+  1194→  1194→          })();
+  1195→  1195→        }
+  1196→  1196→      },
+  1197→  1197→
+  1198→  1198→      getConsultationsByUser: (userId) => {
+  1199→  1199→        return get()
+  1200→  1200→          .consultations.filter((c) => c.userId === userId)
+  1201→  1201→          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  1202→  1202→      },
+  1203→  1203→
+  1204→  1204→      getConsultationById: (id) => {
+  1205→  1205→        return get().consultations.find((c) => c.id === id) || null;
+  1206→  1206→      },
+  1207→  1207→
+  1208→  1208→      getAllConsultations: () => {
+  1209→  1209→        return get().consultations.sort(
+  1210→  1210→          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  1211→  1211→        );
+  1212→  1212→      },
+  1213→  1213→
+  1214→  1214→      // ============ NOTIFICATIONS ============
+  1215→  1215→      getNotificationsByUser: (userId) => {
+  1216→  1216→        return get()
+  1217→  1217→          .notifications.filter((n) => n.userId === userId)
+  1218→  1218→          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  1219→  1219→      },
+  1220→  1220→
+  1221→  1221→      getUnreadNotificationCount: (userId) => {
+  1222→  1222→        return get().notifications.filter((n) => n.userId === userId && !n.isRead).length;
+  1223→  1223→      },
+  1224→  1224→
+  1225→  1225→      markNotificationRead: (notificationId) => {
+  1226→  1226→        set((state) => ({
+  1227→  1227→          notifications: state.notifications.map((n) =>
+  1228→  1228→            n.id === notificationId ? { ...n, isRead: true } : n
+  1229→  1229→          ),
+  1230→  1230→        }));
+  1231→  1231→
+  1232→  1232→        if (isSupabaseConfigured && supabase) {
+  1233→  1233→          void (async () => {
+  1234→  1234→            try {
+  1235→  1235→              const { error } = await supabase
+  1236→  1236→                .from("notifications")
+  1237→  1237→                .update({ is_read: true })
+  1238→  1238→                .eq("id", notificationId);
+  1239→  1239→              if (error) {
+  1240→  1240→                console.error("[Supabase markNotificationRead] error:", error.message);
+  1241→  1241→              }
+  1242→  1242→            } catch (err) {
+  1243→  1243→              console.error("[Supabase markNotificationRead] exception:", err);
+  1244→  1244→            }
+  1245→  1245→          })();
+  1246→  1246→        }
+  1247→  1247→      },
+  1248→  1248→
+  1249→  1249→      markAllNotificationsRead: (userId) => {
+  1250→  1250→        set((state) => ({
+  1251→  1251→          notifications: state.notifications.map((n) =>
+  1252→  1252→            n.userId === userId ? { ...n, isRead: true } : n
+  1253→  1253→          ),
+  1254→  1254→        }));
+  1255→  1255→
+  1256→  1256→        if (isSupabaseConfigured && supabase) {
+  1257→  1257→          void (async () => {
+  1258→  1258→            try {
+  1259→  1259→              const { error } = await supabase
+  1260→  1260→                .from("notifications")
+  1261→  1261→                .update({ is_read: true })
+  1262→  1262→                .eq("user_id", userId)
+  1263→  1263→                .eq("is_read", false);
+  1264→  1264→              if (error) {
+  1265→  1265→                console.error("[Supabase markAllNotificationsRead] error:", error.message);
+  1266→  1266→              }
+  1267→  1267→            } catch (err) {
+  1268→  1268→              console.error("[Supabase markAllNotificationsRead] exception:", err);
+  1269→  1269→            }
+  1270→  1270→          })();
+  1271→  1271→        }
+  1272→  1272→      },
+  1273→  1273→
+  1274→  1274→      // ============ DELETE ACTIONS ============
+  1275→  1275→      deleteUser: (userId) => {
+  1276→  1276→        // Remove user from localStorage
+  1277→  1277→        set((state) => ({
+  1278→  1278→          users: state.users.filter((u) => u.id !== userId),
+  1279→  1279→          children: state.children.filter((c) => c.userId !== userId),
+  1280→  1280→          consultations: state.consultations.filter((c) => c.userId !== userId),
+  1281→  1281→          notifications: state.notifications.filter((n) => n.userId !== userId),
+  1282→  1282→        }));
+  1283→  1283→
+  1284→  1284→        // Delete from Supabase
+  1285→  1285→        if (isSupabaseConfigured && supabase) {
+  1286→  1286→          void (async () => {
+  1287→  1287→            try {
+  1288→  1288→              // Delete consultations from broadcast table
+  1289→  1289→              await supabase.from("broadcast_consultations").delete().eq("user_id", userId);
+  1290→  1290→              // Delete from profiles
+  1291→  1291→              await supabase.from("profiles").delete().eq("id", userId);
+  1292→  1292→              // Delete children
+  1293→  1293→              await supabase.from("children").delete().eq("user_id", userId);
+  1294→  1294→              // Delete notifications
+  1295→  1295→              await supabase.from("notifications").delete().eq("user_id", userId);
+  1296→  1296→              console.log("[Supabase deleteUser] deleted:", userId);
+  1297→  1297→            } catch (err) {
+  1298→  1298→              console.warn("[Supabase deleteUser] exception:", err);
+  1299→  1299→            }
+  1300→  1300→          })();
+  1301→  1301→        }
+  1302→  1302→
+  1303→  1303→        return { success: true, message: "Pengguna berhasil dihapus." };
+  1304→  1304→      },
+  1305→  1305→
+  1306→  1306→      deleteConsultation: (consultationId) => {
+  1307→  1307→        // Remove from localStorage
+  1308→  1308→        set((state) => ({
+  1309→  1309→          consultations: state.consultations.filter((c) => c.id !== consultationId),
+  1310→  1310→          notifications: state.notifications.filter((n) => n.consultationId !== consultationId),
+  1311→  1311→        }));
+  1312→  1312→
+  1313→  1313→        // Delete from Supabase
+  1314→  1314→        if (isSupabaseConfigured && supabase) {
+  1315→  1315→          void (async () => {
+  1316→  1316→            try {
+  1317→  1317→              await supabase.from("broadcast_consultations").delete().eq("id", consultationId);
+  1318→  1318→              await supabase.from("consultations").delete().eq("id", consultationId);
+  1319→  1319→              await supabase.from("notifications").delete().eq("consultation_id", consultationId);
+  1320→  1320→              console.log("[Supabase deleteConsultation] deleted:", consultationId);
+  1321→  1321→            } catch (err) {
+  1322→  1322→              console.warn("[Supabase deleteConsultation] exception:", err);
+  1323→  1323→            }
+  1324→  1324→          })();
+  1325→  1325→        }
+  1326→  1326→
+  1327→  1327→        return { success: true, message: "Konsultasi berhasil dihapus." };
+  1328→  1328→      },
+  1329→  1329→
+  1330→  1330→      // ============ STATS ============
+  1331→  1331→      getStats: () => {
+  1332→  1332→        const { consultations, users } = get();
+  1333→  1333→        return {
+  1334→  1334→          totalConsultations: consultations.length,
+  1335→  1335→          menungguJawaban: consultations.filter((c) => c.status === "Menunggu Jawaban").length,
+  1336→  1336→          sedangDiproses: consultations.filter((c) => c.status === "Sedang Diproses").length,
+  1337→  1337→          sudahDijawab: consultations.filter((c) => c.status === "Sudah Dijawab").length,
+  1338→  1338→          selesai: consultations.filter((c) => c.status === "Selesai").length,
+  1339→  1339→          totalUsers: users.filter((u) => u.role === "user").length,
+  1340→  1340→        };
+  1341→  1341→      },
+  1342→  1342→
+  1343→  1343→      // ============ SUPABASE-ONLY HELPERS ============
+  1344→  1344→
+  1345→  1345→      restoreSession: async () => {
+  1346→  1346→        if (!isSupabaseConfigured || !supabase) {
+  1347→  1347→          return;
+  1348→  1348→        }
+  1349→  1349→        try {
+  1350→  1350→          const { data: sessionData, error } = await supabase.auth.getSession();
+  1351→  1351→          if (error) {
+  1352→  1352→            console.error("[Supabase restoreSession] error:", error.message);
+  1353→  1353→            set({ isAuthLoading: false });
+  1354→  1354→            return;
+  1355→  1355→          }
+  1356→  1356→          const user = sessionData?.session?.user;
+  1357→  1357→          if (!user) {
+  1358→  1358→            // No active Supabase session.
+  1359→  1359→            // DON'T clear currentUserId - it might be set by optimistic login
+  1360→  1360→            // or by localStorage persistence. Only clear if it's a placeholder.
+  1361→  1361→            const { currentUserId } = get();
+  1362→  1362→            if (currentUserId && currentUserId.startsWith("supabase-pending-")) {
+  1363→  1363→              set({ currentUserId: null, isAuthLoading: false });
+  1364→  1364→            } else {
+  1365→  1365→              set({ isAuthLoading: false });
+  1366→  1366→            }
+  1367→  1367→            return;
+  1368→  1368→          }
+  1369→  1369→
+  1370→  1370→          // Fetch the matching profile.
+  1371→  1371→          let profile: UserProfile | null = null;
+  1372→  1372→          try {
+  1373→  1373→            const { data: profileRow, error: profileError } = await supabase
+  1374→  1374→              .from("profiles")
+  1375→  1375→              .select("*")
+  1376→  1376→              .eq("id", user.id)
+  1377→  1377→              .maybeSingle();
+  1378→  1378→            if (profileError) {
+  1379→  1379→              console.warn("[Supabase restoreSession] profile error:", profileError.message);
+  1380→  1380→            }
+  1381→  1381→            if (profileRow) {
+  1382→  1382→              profile = mapProfileRow(profileRow as ProfileRow, user.email);
+  1383→  1383→            } else {
+  1384→  1384→              profile = {
+  1385→  1385→                id: user.id,
+  1386→  1386→                namaOrangTua: (user.user_metadata?.nama_orang_tua as string) || "",
+  1387→  1387→                email: user.email || "",
+  1388→  1388→                nomorTelepon: (user.user_metadata?.nomor_telepon as string) || "",
+  1389→  1389→                alamat: (user.user_metadata?.alamat as string) || "",
+  1390→  1390→                passwordHash: "",
+  1391→  1391→                role: "user",
+  1392→  1392→                createdAt: user.created_at || new Date().toISOString(),
+  1393→  1393→                updatedAt: new Date().toISOString(),
+  1394→  1394→              };
+  1395→  1395→            }
+  1396→  1396→          } catch (err) {
+  1397→  1397→            console.warn("[Supabase restoreSession] profile fetch exception:", err);
+  1398→  1398→          }
+  1399→  1399→
+  1400→  1400→          const is_admin =
+  1401→  1401→            profile?.role === "admin" ||
+  1402→  1402→            user.email?.toLowerCase() === DEFAULT_ADMIN_EMAIL;
+  1403→  1403→
+  1404→  1404→          set((state) => ({
+  1405→  1405→            currentUserId: profile ? profile.id : state.currentUserId,
+  1406→  1406→            isAdmin: is_admin,
+  1407→  1407→            currentAdminId: is_admin ? (profile?.id || "admin-default") : null,
+  1408→  1408→            users: profile
+  1409→  1409→              ? [
+  1410→  1410→                  ...state.users.filter((u) => u.id !== profile!.id),
+  1411→  1411→                  profile!,
+  1412→  1412→                ]
+  1413→  1413→              : state.users,
+  1414→  1414→            isAuthLoading: false,
+  1415→  1415→            authError: null,
+  1416→  1416→          }));
+  1417→  1417→
+  1418→  1418→          // Hydrate the rest of the data from the server.
+  1419→  1419→          await get().refreshData();
+  1420→  1420→        } catch (err) {
+  1421→  1421→          console.error("[Supabase restoreSession] exception:", err);
+  1422→  1422→          set({ isAuthLoading: false });
+  1423→  1423→        }
+  1424→  1424→      },
+  1425→  1425→
+  1426→  1426→      refreshData: async () => {
+  1427→  1427→        if (!isSupabaseConfigured || !supabase) {
+  1428→  1428→          return;
+  1429→  1429→        }
+  1430→  1430→        const { currentUserId, isAdmin } = get();
+  1431→  1431→        try {
+  1432→  1432→          // Fetch consultations.
+  1433→  1433→          let consultationRows: ConsultationRow[] = [];
+  1434→  1434→          try {
+  1435→  1435→            if (isAdmin) {
+  1436→  1436→              // Admin reads from broadcast_consultations (no RLS, public read)
+  1437→  1437→              const { data, error } = await supabase
+  1438→  1438→                .from("broadcast_consultations")
+  1439→  1439→                .select("*")
+  1440→  1440→                .order("created_at", { ascending: false });
+  1441→  1441→              if (error) {
+  1442→  1442→                console.warn("[Supabase refreshData] broadcast_consultations:", error.message);
+  1443→  1443→              } else if (data) {
+  1444→  1444→                consultationRows = data as ConsultationRow[];
+  1445→  1445→              }
+  1446→  1446→            } else if (currentUserId && !currentUserId.startsWith("supabase-pending-")) {
+  1447→  1447→              // User reads their own consultations from broadcast table
+  1448→  1448→              const { data, error } = await supabase
+  1449→  1449→                .from("broadcast_consultations")
+  1450→  1450→                .select("*")
+  1451→  1451→                .eq("user_id", currentUserId)
+  1452→  1452→                .order("created_at", { ascending: false });
+  1453→  1453→              if (error) {
+  1454→  1454→                console.warn("[Supabase refreshData] user consultations:", error.message);
+  1455→  1455→              } else if (data) {
+  1456→  1456→                consultationRows = data as ConsultationRow[];
+  1457→  1457→              }
+  1458→  1458→            }
+  1459→  1459→          } catch (e) {
+  1460→  1460→            console.warn("[Supabase refreshData] consultations exception:", e);
+  1461→  1461→          }
+  1462→  1462→          const consultations = consultationRows.map(mapConsultationRow);
+  1463→  1463→
+  1464→  1464→          // Fetch notifications.
+  1465→  1465→          let notificationRows: NotificationRow[] = [];
+  1466→  1466→          try {
+  1467→  1467→            if (isAdmin) {
+  1468→  1468→              const { data, error } = await supabase
+  1469→  1469→                .from("notifications")
+  1470→  1470→                .select("*")
+  1471→  1471→                .eq("user_id", "admin")
+  1472→  1472→                .order("created_at", { ascending: false });
+  1473→  1473→              if (error) {
+  1474→  1474→                console.warn("[Supabase refreshData] notifications (admin):", error.message);
+  1475→  1475→              } else if (data) {
+  1476→  1476→                notificationRows = data as NotificationRow[];
+  1477→  1477→              }
+  1478→  1478→            } else if (currentUserId && !currentUserId.startsWith("supabase-pending-")) {
+  1479→  1479→              const { data, error } = await supabase
+  1480→  1480→                .from("notifications")
+  1481→  1481→                .select("*")
+  1482→  1482→                .eq("user_id", currentUserId)
+  1483→  1483→                .order("created_at", { ascending: false });
+  1484→  1484→              if (error) {
+  1485→  1485→                console.warn("[Supabase refreshData] notifications:", error.message);
+  1486→  1486→              } else if (data) {
+  1487→  1487→                notificationRows = data as NotificationRow[];
+  1488→  1488→              }
+  1489→  1489→            }
+  1490→  1490→          } catch (e) {
+  1491→  1491→            console.warn("[Supabase refreshData] notifications exception:", e);
+  1492→  1492→          }
+  1493→  1493→          const notifications = notificationRows.map(mapNotificationRow);
+  1494→  1494→
+  1495→  1495→          // Fetch children (current user only).
+  1496→  1496→          let children: ChildProfile[] = [];
+  1497→  1497→          try {
+  1498→  1498→            if (currentUserId && !currentUserId.startsWith("supabase-pending-")) {
+  1499→  1499→              const { data, error } = await supabase
+  1500→  1500→                .from("children")
+  1501→  1501→                .select("*")
+  1502→  1502→                .eq("user_id", currentUserId)
+  1503→  1503→                .order("created_at", { ascending: false });
+  1504→  1504→              if (error) {
+  1505→  1505→                console.warn("[Supabase refreshData] children:", error.message);
+  1506→  1506→              } else if (data) {
+  1507→  1507→                children = (data as ChildRow[]).map(mapChildRow);
+  1508→  1508→              }
+  1509→  1509→            }
+  1510→  1510→          } catch (e) {
+  1511→  1511→            console.warn("[Supabase refreshData] children exception:", e);
+  1512→  1512→          }
+  1513→  1513→
+  1514→  1514→          // For admins, also fetch profiles.
+  1515→  1515→          let users: UserProfile[] = [];
+  1516→  1516→          try {
+  1517→  1517→            if (isAdmin) {
+  1518→  1518→              const { data, error } = await supabase
+  1519→  1519→                .from("profiles")
+  1520→  1520→                .select("*")
+  1521→  1521→                .order("created_at", { ascending: false });
+  1522→  1522→              if (error) {
+  1523→  1523→                console.warn("[Supabase refreshData] profiles:", error.message);
+  1524→  1524→              } else if (data) {
+  1525→  1525→                users = (data as ProfileRow[]).map((row) => mapProfileRow(row));
+  1526→  1526→              }
+  1527→  1527→            } else if (currentUserId) {
+  1528→  1528→              // Make sure the current user's profile is in local state.
+  1529→  1529→              const existing = get().users.find((u) => u.id === currentUserId);
+  1530→  1530→              users = existing ? [existing] : [];
+  1531→  1531→            }
+  1532→  1532→          } catch (e) {
+  1533→  1533→            console.warn("[Supabase refreshData] profiles exception:", e);
+  1534→  1534→          }
+  1535→  1535→
+  1536→  1536→          set((state) => ({
+  1537→  1537→            consultations: consultationRows.length > 0 ? consultations : state.consultations,
+  1538→  1538→            notifications: notificationRows.length > 0 ? notifications : state.notifications,
+  1539→  1539→            children: children.length > 0 ? children : state.children,
+  1540→  1540→            users: users.length > 0 ? users : state.users,
+  1541→  1541→            lastRefreshedAt: new Date().toISOString(),
+  1542→  1542→            isAuthLoading: false,
+  1543→  1543→          }));
+  1544→  1544→        } catch (err) {
+  1545→  1545→          console.error("[Supabase refreshData] exception:", err);
+  1546→  1546→        }
+  1547→  1547→      },
+  1548→  1548→
+  1549→  1549→      resetPassword: async (email) => {
+  1550→  1550→        const emailLower = email.toLowerCase().trim();
+  1551→  1551→        if (!emailLower) {
+  1552→  1552→          return { success: false, message: "Email wajib diisi." };
+  1553→  1553→        }
+  1554→  1554→        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLower)) {
+  1555→  1555→          return { success: false, message: "Format email tidak valid." };
+  1556→  1556→        }
+  1557→  1557→
+  1558→  1558→        if (isSupabaseConfigured && supabase) {
+  1559→  1559→          try {
+  1560→  1560→            const { error } = await supabase.auth.resetPasswordForEmail(
+  1561→  1561→              emailLower,
+  1562→  1562→              {
+  1563→  1563→                redirectTo: typeof window !== "undefined"
+  1564→  1564→                  ? `${window.location.origin}/#reset-password`
+  1565→  1565→                  : undefined,
+  1566→  1566→              }
+  1567→  1567→            );
+  1568→  1568→            if (error) {
+  1569→  1569→              console.error("[Supabase resetPassword] error:", error.message);
+  1570→  1570→              return { success: false, message: error.message };
+  1571→  1571→            }
+  1572→  1572→            return {
+  1573→  1573→              success: true,
+  1574→  1574→              message: "Link reset password telah dikirim ke email Anda. Silakan cek inbox (dan folder spam).",
+  1575→  1575→            };
+  1576→  1576→          } catch (err) {
+  1577→  1577→            console.error("[Supabase resetPassword] exception:", err);
+  1578→  1578→            return { success: false, message: "Gagal mengirim email reset password." };
+  1579→  1579→          }
+  1580→  1580→        }
+  1581→  1581→
+  1582→  1582→        // localStorage mode - no real email reset possible
+  1583→  1583→        return {
+  1584→  1584→          success: false,
+  1585→  1585→          message: "Reset password tidak tersedia di mode offline. Hubungi admin untuk reset manual.",
+  1586→  1586→        };
+  1587→  1587→      },
+  1588→  1588→    }),
+  1589→  1589→    {
+  1590→  1590→      name: "gemas-auth-storage",
+  1591→  1591→      // In Supabase mode we only persist auth flags (the source of truth
+  1592→  1592→      // lives on the server). In localStorage mode we persist everything
+  1593→  1593→      // (the original behavior).
+  1594→  1594→      partialize: (state) => {
+  1595→  1595→        // Always save everything to localStorage
+  1596→  1596→        // This ensures data persists even when Supabase fails
+  1597→  1597→        if (isSupabaseConfigured) {
+  1598→  1598→          return {
+  1599→  1599→            currentUserId: state.currentUserId,
+  1600→  1600→            currentAdminId: state.currentAdminId,
+  1601→  1601→            isAdmin: state.isAdmin,
+  1602→  1602→            users: state.users,
+  1603→  1603→            children: state.children,
+  1604→  1604→            consultations: state.consultations,
+  1605→  1605→            notifications: state.notifications,
+  1606→  1606→          };
+  1607→  1607→        }
+  1608→  1608→        return {
+  1609→  1609→          users: state.users,
+  1610→  1610→          children: state.children,
+  1611→  1611→          consultations: state.consultations,
+  1612→  1612→          notifications: state.notifications,
+  1613→  1613→        };
+  1614→  1614→      },
+  1615→  1615→    }
+  1616→  1616→  )
+  1617→  1617→);
+  1618→  1618→
+  1619→  1619→// =====================================================
+  1620→  1620→// HELPER HOOK: useSupabaseSession
+  1621→  1621→// Restores the Supabase session on app load (no-op in localStorage mode).
+  1622→  1622→// =====================================================
+  1623→  1623→
+  1624→  1624→/**
+  1625→  1625→ * Call this hook once at the app root to restore any existing Supabase
+  1626→  1626→ * session and hydrate the store with server data. In localStorage mode
+  1627→  1627→ * this is a no-op (the persist middleware already handled rehydration).
+  1628→  1628→ */
+  1629→  1629→export function useSupabaseSession() {
+  1630→  1630→  const restoreSession = useAuthStore((s) => s.restoreSession);
+  1631→  1631→  useEffect(() => {
+  1632→  1632→    if (!isSupabaseConfigured) return;
+  1633→  1633→    void restoreSession();
+  1634→  1634→  }, [restoreSession]);
+  1635→  1635→}
+  1636→  1636→
+  1637→  1637→// =====================================================
+  1638→  1638→// HELPER EXPORTS
+  1639→  1639→// =====================================================
+  1640→  1640→
+  1641→  1641→export const AUTH_DEFAULTS = {
+  1642→  1642→  adminEmail: DEFAULT_ADMIN_EMAIL,
+  1643→  1643→  adminPassword: DEFAULT_ADMIN_PASSWORD,
+  1644→  1644→};
+  1645→  1645→
+  1646→  1646→export const CONSULTATION_STATUS_COLORS: Record<ConsultationStatus, { bg: string; text: string; emoji: string }> = {
+  1647→  1647→  "Menunggu Jawaban": { bg: "bg-orange-100", text: "text-orange-700", emoji: "🟠" },
+  1648→  1648→  "Sedang Diproses": { bg: "bg-blue-100", text: "text-blue-700", emoji: "🔵" },
+  1649→  1649→  "Sudah Dijawab": { bg: "bg-green-100", text: "text-green-700", emoji: "🟢" },
+  1650→  1650→  "Selesai": { bg: "bg-gray-100", text: "text-gray-700", emoji: "⚫" },
+  1651→  1651→};
+  1652→  1652→
