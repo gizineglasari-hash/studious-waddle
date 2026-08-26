@@ -510,31 +510,57 @@ export const useAuthStore = create<AuthState>()(
         }
 
         if (isSupabaseConfigured && supabase) {
-          // For Supabase mode: use SYNCHRONOUS fallback approach
-          // Try to sign in synchronously using a workaround:
-          // Set loading state, then let the async complete
-          // BUT return a special message that tells the UI to wait
-
-          // Actually, we can't make this truly synchronous.
-          // Best approach: use localStorage fallback for immediate login,
-          // then sync with Supabase in background.
-
           // Check if user exists in localStorage (from previous registration)
           const { users } = get();
-          const localUser = users.find(
+          const matchingUsers = users.filter(
             (u) => u.email.toLowerCase() === emailLower && u.role === "user"
           );
 
-          if (localUser && localUser.passwordHash === simpleHash(password)) {
-            // Found in localStorage - login immediately
-            set({
-              currentUserId: localUser.id,
+          // Find the user with a valid passwordHash (the "local" entry)
+          const localUser = matchingUsers.find(
+            (u) => u.passwordHash && u.passwordHash === simpleHash(password)
+          );
+
+          if (localUser) {
+            // Among all matching users, prefer the one with a Supabase Auth UUID
+            // (i.e., the entry created at registration time when signUpData.user.id was cached).
+            // This is critical: children table has FK to profiles(id), so we MUST use
+            // the real Supabase UUID, not the local-generated one.
+            const supabaseUser = matchingUsers.find(
+              (u) =>
+                u.id !== localUser.id &&
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(u.id)
+            );
+
+            // Use Supabase UUID if available; otherwise fall back to local ID
+            const realUserId = supabaseUser?.id || localUser.id;
+
+            // Merge: keep the Supabase UUID + the passwordHash (for future logins)
+            const mergedUser: UserProfile = {
+              ...(supabaseUser || localUser),
+              id: realUserId,
+              passwordHash: localUser.passwordHash,
+            };
+
+            set((state) => ({
+              currentUserId: realUserId,
               isAdmin: false,
               isAuthLoading: false,
               authError: null,
-            });
+              // Replace all matching users with the single merged user
+              users: [
+                ...state.users.filter(
+                  (u) => u.email.toLowerCase() !== emailLower || u.role !== "user"
+                ),
+                mergedUser,
+              ],
+              // Re-tag any local children that were saved with the old local ID
+              children: state.children.map((c) =>
+                c.userId === localUser.id ? { ...c, userId: realUserId } : c
+              ),
+            }));
 
-            // Sync with Supabase in background
+            // Sync with Supabase in background (to refresh token)
             void (async () => {
               try {
                 const { data: signInData, error } =
@@ -550,7 +576,7 @@ export const useAuthStore = create<AuthState>()(
                 }
 
                 if (signInData.user) {
-                  // Update with Supabase UUID
+                  // Ensure currentUserId matches the Supabase UUID
                   set({ currentUserId: signInData.user.id });
                   await get().refreshData();
                 }
@@ -870,7 +896,7 @@ export const useAuthStore = create<AuthState>()(
 
       // ============ CHILDREN ============
       addChild: (data) => {
-        const { currentUserId } = get();
+        const { currentUserId, users } = get();
         if (!currentUserId) {
           return { success: false, message: "Anda harus login terlebih dahulu." };
         }
@@ -910,11 +936,47 @@ export const useAuthStore = create<AuthState>()(
         if (isSupabaseConfigured && supabase) {
           void (async () => {
             try {
-              // Don't send custom ID - let Supabase auto-generate UUID
+              // First, try to find the REAL Supabase UUID for this user.
+              // The currentUserId might be a localStorage-generated ID that doesn't
+              // exist in the profiles table (causing FK violation on INSERT).
+              let effectiveUserId = currentUserId;
+              const currentUserProfile = users.find((u) => u.id === currentUserId);
+
+              // If we can't find the profile locally, or if we need to verify,
+              // try to fetch from Supabase by email
+              if (supabase) {
+                try {
+                  const emailToLookup = currentUserProfile?.email;
+                  if (emailToLookup) {
+                    const { data: profileRow, error: profileErr } = await supabase
+                      .from("profiles")
+                      .select("id, email")
+                      .eq("email", emailToLookup)
+                      .maybeSingle();
+
+                    if (!profileErr && profileRow && profileRow.id !== effectiveUserId) {
+                      // Found the real Supabase UUID - update currentUserId and use it
+                      effectiveUserId = profileRow.id;
+                      console.log("[addChild] Found real Supabase UUID:", effectiveUserId, "(was:", currentUserId, ")");
+                      set((state) => ({
+                        currentUserId: effectiveUserId,
+                        children: state.children.map((c) =>
+                          c.userId === currentUserId ? { ...c, userId: effectiveUserId } : c
+                        ),
+                      }));
+                    }
+                  }
+                } catch (lookupErr) {
+                  console.warn("[addChild] profile lookup exception:", lookupErr);
+                  // Continue with original userId - INSERT might still work
+                }
+              }
+
+              // Insert with the effective (real) user_id
               const { data: inserted, error } = await supabase
                 .from("children")
                 .insert({
-                  user_id: currentUserId,
+                  user_id: effectiveUserId,
                   nama_anak: newChild.namaAnak,
                   tanggal_lahir: newChild.tanggalLahir,
                   jenis_kelamin: newChild.jenisKelamin,
@@ -933,7 +995,7 @@ export const useAuthStore = create<AuthState>()(
                 const realId = (inserted as any).id;
                 set((state) => ({
                   children: state.children.map((c) =>
-                    c.id === localId ? { ...c, id: realId } : c
+                    c.id === localId ? { ...c, id: realId, userId: effectiveUserId } : c
                   ),
                 }));
               }
@@ -1058,11 +1120,43 @@ export const useAuthStore = create<AuthState>()(
         if (isSupabaseConfigured && supabase) {
           void (async () => {
             try {
+              // First, try to find the REAL Supabase UUID for this user.
+              // The currentUserId might be a localStorage-generated ID that doesn't
+              // match the profiles table. This is important for admin dashboard sync.
+              let effectiveUserId = currentUserId;
+              try {
+                const emailToLookup = user.email;
+                if (emailToLookup) {
+                  const { data: profileRow, error: profileErr } = await supabase
+                    .from("profiles")
+                    .select("id, email")
+                    .eq("email", emailToLookup)
+                    .maybeSingle();
+
+                  if (!profileErr && profileRow && profileRow.id !== effectiveUserId) {
+                    effectiveUserId = profileRow.id;
+                    console.log("[createConsultation] Found real Supabase UUID:", effectiveUserId, "(was:", currentUserId, ")");
+                    // Update currentUserId and re-tag local children
+                    set((state) => ({
+                      currentUserId: effectiveUserId,
+                      children: state.children.map((c) =>
+                        c.userId === currentUserId ? { ...c, userId: effectiveUserId } : c
+                      ),
+                      consultations: state.consultations.map((c) =>
+                        c.id === consultationId ? { ...c, userId: effectiveUserId } : c
+                      ),
+                    }));
+                  }
+                }
+              } catch (lookupErr) {
+                console.warn("[createConsultation] profile lookup exception:", lookupErr);
+              }
+
               // Use broadcast_consultations table (no RLS, anyone can insert)
               const { data: consultInserted, error: consultError } = await supabase
                 .from("broadcast_consultations")
                 .insert({
-                  user_id: currentUserId,
+                  user_id: effectiveUserId,
                   nama_anak: newConsultation.namaAnak,
                   tanggal_lahir_anak: newConsultation.tanggalLahirAnak,
                   jenis_kelamin_anak: newConsultation.jenisKelaminAnak,
@@ -1088,7 +1182,7 @@ export const useAuthStore = create<AuthState>()(
               const realConsultId = (consultInserted as any).id;
               set((state) => ({
                 consultations: state.consultations.map((c) =>
-                  c.id === consultationId ? { ...c, id: realConsultId } : c
+                  c.id === consultationId ? { ...c, id: realConsultId, userId: effectiveUserId } : c
                 ),
               }));
             } catch (err) {
