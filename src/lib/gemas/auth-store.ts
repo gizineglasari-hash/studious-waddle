@@ -1281,11 +1281,19 @@ export const useAuthStore = create<AuthState>()(
           notifications: state.notifications.filter((n) => n.userId !== userId),
         }));
 
-        // Delete from Supabase broadcast_consultations
+        // Delete from Supabase
         if (isSupabaseConfigured && supabase) {
           void (async () => {
             try {
+              // Delete consultations from broadcast table
               await supabase.from("broadcast_consultations").delete().eq("user_id", userId);
+              // Delete from profiles
+              await supabase.from("profiles").delete().eq("id", userId);
+              // Delete children
+              await supabase.from("children").delete().eq("user_id", userId);
+              // Delete notifications
+              await supabase.from("notifications").delete().eq("user_id", userId);
+              console.log("[Supabase deleteUser] deleted:", userId);
             } catch (err) {
               console.warn("[Supabase deleteUser] exception:", err);
             }
@@ -1302,11 +1310,14 @@ export const useAuthStore = create<AuthState>()(
           notifications: state.notifications.filter((n) => n.consultationId !== consultationId),
         }));
 
-        // Delete from Supabase broadcast_consultations
+        // Delete from Supabase
         if (isSupabaseConfigured && supabase) {
           void (async () => {
             try {
               await supabase.from("broadcast_consultations").delete().eq("id", consultationId);
+              await supabase.from("consultations").delete().eq("id", consultationId);
+              await supabase.from("notifications").delete().eq("consultation_id", consultationId);
+              console.log("[Supabase deleteConsultation] deleted:", consultationId);
             } catch (err) {
               console.warn("[Supabase deleteConsultation] exception:", err);
             }
@@ -1523,8 +1534,8 @@ export const useAuthStore = create<AuthState>()(
           }
 
           set((state) => ({
-            consultations,
-            notifications,
+            consultations: consultationRows.length > 0 ? consultations : state.consultations,
+            notifications: notificationRows.length > 0 ? notifications : state.notifications,
             children: children.length > 0 ? children : state.children,
             users: users.length > 0 ? users : state.users,
             lastRefreshedAt: new Date().toISOString(),

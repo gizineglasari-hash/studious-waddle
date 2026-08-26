@@ -79,9 +79,21 @@ export function UserDashboardView() {
     addChild,
     updateProfile,
   } = useAuthStore();
+  const refreshData = useAuthStore((s) => s.refreshData);
 
   const user = getCurrentUser();
   const isAuthLoading = useAuthStore((s) => s.isAuthLoading);
+
+  // Auto-refresh data from Supabase every 15 seconds
+  // So user can see admin's answer without manual refresh
+  useEffect(() => {
+    if (!user) return;
+    refreshData();
+    const interval = setInterval(() => {
+      refreshData();
+    }, 15000); // Refresh every 15 seconds
+    return () => clearInterval(interval);
+  }, [user, refreshData]);
 
   // Profile editing - ALL hooks must be before any conditional return
   const [editingProfile, setEditingProfile] = useState(false);

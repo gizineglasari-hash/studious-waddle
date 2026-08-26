@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import {
   ArrowLeft,
   Baby,
@@ -51,6 +52,16 @@ function formatDate(iso: string): string {
 export function ConsultationDetailView() {
   const { setView, selectedConsultationId } = useGemasStore();
   const { getConsultationById } = useAuthStore();
+  const refreshData = useAuthStore((s) => s.refreshData);
+
+  // Auto-refresh every 10 seconds to check for admin's answer
+  useEffect(() => {
+    refreshData();
+    const interval = setInterval(() => {
+      refreshData();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [refreshData]);
 
   const consultation = selectedConsultationId
     ? getConsultationById(selectedConsultationId)
