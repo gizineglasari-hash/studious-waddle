@@ -143,3 +143,54 @@ Stage Summary:
 - User must run supabase-fix-content-rls-v2.sql for full Draft support.
 - Default content seeded to Supabase (2 items).
 - Production deployment ready.
+
+---
+Task ID: 5
+Agent: main (Super Z)
+Task: Fix Excel Export - export ALL users with children + consultations from database
+
+Work Log:
+- Investigated current export: was using CSV format, only exported filteredUsers (data shown on page), didn't include children details (only names joined), didn't have consultation dates
+- Installed xlsx library (SheetJS) for proper .xlsx generation
+- Added fetchAllDataForExport() to auth-store.ts:
+  * Fetches ALL profiles from Supabase (no pagination, no limit)
+  * Fetches ALL children from Supabase
+  * Fetches ALL consultations from broadcast_consultations table
+  * Returns combined data for Excel generation
+  * Falls back to localStorage if Supabase not configured
+- Rewrote handleDownloadExcel in AdminUsersView.tsx:
+  * Now async - fetches ALL data from database via fetchAllDataForExport()
+  * Uses XLSX library to generate proper .xlsx file (not CSV)
+  * One row per child (parent with 2 children = 2 rows, parent with no children = 1 row)
+  * 13 columns: No, Nama Orang Tua, Email, No. Telepon, Alamat, Nama Anak, Jenis Kelamin, Tanggal Lahir Anak, Berat Badan (kg), Tinggi Badan (cm), Jumlah Konsultasi, Tanggal Konsultasi Terakhir, Tanggal Daftar
+  * Date format: DD/MM/YYYY
+  * Gender: "Laki-laki" / "Perempuan"
+  * Empty data: "-" or "Belum ada konsultasi"
+  * Column widths set for readability
+  * Header row styled (green background, white bold text)
+  * Freeze header row (stays visible when scrolling)
+  * Filename: Data_Seluruh_Pengguna_GEMAS_DD-MM-YYYY.xlsx
+- Updated UI: button text "Export Excel (Semua Data)", FileSpreadsheet icon
+- Updated info box: explains .xlsx format, all columns, one row per child rule
+- Ran end-to-end tests:
+  * Test 1: All profiles fetched (no pagination) - PASS
+  * Test 2: All children fetched - PASS
+  * Test 3: All consultations fetched - PASS
+  * Test 4: User with 2 children = 2 rows - PASS
+  * Test 5: User without children = 1 row - PASS
+  * Test 6: Consultation count from real records - PASS
+  * Test 7: Last consultation date = most recent - PASS
+  * Test 8: Data persists after refresh - PASS (data comes from Supabase)
+- Build succeeds, no TypeScript errors.
+
+Stage Summary:
+- Admin Dashboard → Data Pengguna → Export Excel now:
+  1. Fetches ALL data from Supabase (not just page/pagination)
+  2. Generates proper .xlsx file with 13 columns
+  3. One row per child (multi-child parents get multiple rows)
+  4. Real consultation count from database
+  5. Last consultation date from most recent record
+  6. Professional formatting: styled header, column widths, frozen header
+  7. Filename: Data_Seluruh_Pengguna_GEMAS_DD-MM-YYYY.xlsx
+- Only admin can access (existing auth check preserved)
+- Existing features (search, filter, stats, delete) all preserved

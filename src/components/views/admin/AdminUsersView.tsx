@@ -3,7 +3,6 @@
 import { useState, useMemo, useEffect } from "react";
 import {
   Users,
-  Download,
   Search,
   LayoutDashboard,
   ShieldCheck,
@@ -14,7 +13,9 @@ import {
   User,
   Loader2,
   Trash2,
+  FileSpreadsheet,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +43,7 @@ export function AdminUsersView() {
   const consultations = useAuthStore((s) => s.consultations);
   const deleteUser = useAuthStore((s) => s.deleteUser);
   const refreshData = useAuthStore((s) => s.refreshData);
+  const fetchAllDataForExport = useAuthStore((s) => s.fetchAllDataForExport);
   const [mounted, setMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [downloading, setDownloading] = useState(false);
@@ -102,74 +104,206 @@ export function AdminUsersView() {
     });
   }, [filteredUsers, children, consultations]);
 
-  // Download as Excel (CSV format - opens in Excel)
-  const handleDownloadExcel = () => {
+  // Download as Excel (.xlsx format) - fetches ALL data from database
+  const handleDownloadExcel = async () => {
     setDownloading(true);
     try {
-      // CSV headers
-      const headers = [
-        "No",
-        "Nama Orang Tua",
-        "Email",
-        "Nomor Telepon",
-        "Alamat",
-        "Jumlah Anak",
-        "Nama Anak",
-        "Jumlah Konsultasi",
-        "Tanggal Daftar",
+      // Fetch ALL data from Supabase (no pagination, no limit)
+      const exportData = await fetchAllDataForExport();
+      const allUsers = exportData.users;
+      const allChildren = exportData.children;
+      const allConsultations = exportData.consultations;
+
+      if (allUsers.length === 0) {
+        toast({
+          title: "Tidak ada data",
+          description: "Belum ada pengguna terdaftar di database untuk diekspor.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Helper: format date to DD/MM/YYYY
+      const formatDate = (dateStr: string | null | undefined): string => {
+        if (!dateStr) return "-";
+        try {
+          const d = new Date(dateStr);
+          if (isNaN(d.getTime())) return "-";
+          const dd = String(d.getDate()).padStart(2, "0");
+          const mm = String(d.getMonth() + 1).padStart(2, "0");
+          const yyyy = d.getFullYear();
+          return `${dd}/${mm}/${yyyy}`;
+        } catch {
+          return "-";
+        }
+      };
+
+      // Helper: format date with time for consultation
+      const formatDateTime = (dateStr: string | null | undefined): string => {
+        if (!dateStr) return "Belum ada konsultasi";
+        try {
+          const d = new Date(dateStr);
+          if (isNaN(d.getTime())) return "Belum ada konsultasi";
+          const dd = String(d.getDate()).padStart(2, "0");
+          const mm = String(d.getMonth() + 1).padStart(2, "0");
+          const yyyy = d.getFullYear();
+          return `${dd}/${mm}/${yyyy}`;
+        } catch {
+          return "Belum ada konsultasi";
+        }
+      };
+
+      // Helper: format gender
+      const formatGender = (gender: string | null | undefined): string => {
+        if (gender === "L") return "Laki-laki";
+        if (gender === "P") return "Perempuan";
+        return "-";
+      };
+
+      // Build rows: one row per child (if parent has multiple children, multiple rows)
+      // If parent has no children, still one row with empty child fields
+      const rows: Record<string, unknown>[] = [];
+      let rowNumber = 1;
+
+      for (const user of allUsers) {
+        // Get all children for this user
+        const userChildren = allChildren.filter((c) => c.userId === user.id);
+
+        // Get all consultations for this user
+        const userConsultations = allConsultations.filter((c) => c.userId === user.id);
+        const consultationCount = userConsultations.length;
+
+        // Find last consultation date (most recent created_at)
+        let lastConsultationDate: string | null = null;
+        if (userConsultations.length > 0) {
+          const sorted = userConsultations
+            .map((c) => c.createdAt)
+            .filter(Boolean)
+            .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+          if (sorted.length > 0) {
+            lastConsultationDate = sorted[0];
+          }
+        }
+
+        if (userChildren.length === 0) {
+          // No children - one row with empty child fields
+          rows.push({
+            "No": rowNumber++,
+            "Nama Orang Tua": user.namaOrangTua || "-",
+            "Email": user.email || "-",
+            "No. Telepon": user.nomorTelepon || "-",
+            "Alamat": user.alamat || "-",
+            "Nama Anak": "-",
+            "Jenis Kelamin": "-",
+            "Tanggal Lahir Anak": "-",
+            "Berat Badan (kg)": "-",
+            "Tinggi Badan (cm)": "-",
+            "Jumlah Konsultasi": consultationCount,
+            "Tanggal Konsultasi Terakhir": lastConsultationDate
+              ? formatDateTime(lastConsultationDate)
+              : "Belum ada konsultasi",
+            "Tanggal Daftar": formatDate(user.createdAt),
+          });
+        } else {
+          // One row per child
+          for (const child of userChildren) {
+            rows.push({
+              "No": rowNumber++,
+              "Nama Orang Tua": user.namaOrangTua || "-",
+              "Email": user.email || "-",
+              "No. Telepon": user.nomorTelepon || "-",
+              "Alamat": user.alamat || "-",
+              "Nama Anak": child.namaAnak || "-",
+              "Jenis Kelamin": formatGender(child.jenisKelamin),
+              "Tanggal Lahir Anak": formatDate(child.tanggalLahir),
+              "Berat Badan (kg)": child.beratBadan > 0 ? child.beratBadan : "-",
+              "Tinggi Badan (cm)": child.tinggiBadan > 0 ? child.tinggiBadan : "-",
+              "Jumlah Konsultasi": consultationCount,
+              "Tanggal Konsultasi Terakhir": lastConsultationDate
+                ? formatDateTime(lastConsultationDate)
+                : "Belum ada konsultasi",
+              "Tanggal Daftar": formatDate(user.createdAt),
+            });
+          }
+        }
+      }
+
+      // Create worksheet
+      const ws = XLSX.utils.json_to_sheet(rows, {
+        header: [
+          "No",
+          "Nama Orang Tua",
+          "Email",
+          "No. Telepon",
+          "Alamat",
+          "Nama Anak",
+          "Jenis Kelamin",
+          "Tanggal Lahir Anak",
+          "Berat Badan (kg)",
+          "Tinggi Badan (cm)",
+          "Jumlah Konsultasi",
+          "Tanggal Konsultasi Terakhir",
+          "Tanggal Daftar",
+        ],
+      });
+
+      // Set column widths
+      ws["!cols"] = [
+        { wch: 5 },   // No
+        { wch: 25 },  // Nama Orang Tua
+        { wch: 30 },  // Email
+        { wch: 15 },  // No. Telepon
+        { wch: 35 },  // Alamat
+        { wch: 20 },  // Nama Anak
+        { wch: 12 },  // Jenis Kelamin
+        { wch: 18 },  // Tanggal Lahir Anak
+        { wch: 15 },  // Berat Badan
+        { wch: 15 },  // Tinggi Badan
+        { wch: 18 },  // Jumlah Konsultasi
+        { wch: 25 },  // Tanggal Konsultasi Terakhir
+        { wch: 15 },  // Tanggal Daftar
       ];
 
-      // CSV rows
-      const rows = userStats.map((u, i) => [
-        i + 1,
-        u.namaOrangTua || "-",
-        u.email || "-",
-        u.nomorTelepon || "-",
-        u.alamat || "-",
-        u.childrenCount,
-        u.childrenNames || "-",
-        u.consultationsCount,
-        u.createdAt ? new Date(u.createdAt).toLocaleDateString("id-ID") : "-",
-      ]);
+      // Freeze header row (row 1 stays visible when scrolling)
+      ws["!freeze"] = { xSplit: "0", ySplit: "1", topLeftCell: "A2", activePane: "bottomLeft", state: "frozen" };
 
-      // Combine into CSV
-      const csvContent = [
-        headers.join(","),
-        ...rows.map((row) =>
-          row
-            .map((cell) => {
-              // Escape quotes and wrap in quotes if contains comma
-              const str = String(cell);
-              if (str.includes(",") || str.includes('"') || str.includes("\n")) {
-                return `"${str.replace(/"/g, '""')}"`;
-              }
-              return str;
-            })
-            .join(",")
-        ),
-      ].join("\n");
+      // Style header row (bold + background color)
+      const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
+      for (let col = range.s.c; col <= range.e.c; col++) {
+        const cellRef = XLSX.utils.encode_cell({ r: 0, c: col });
+        const cell = ws[cellRef];
+        if (cell) {
+          cell.s = {
+            font: { bold: true, color: { rgb: "FFFFFF" } },
+            fill: { fgColor: { rgb: "16A34A" } }, // green-600
+            alignment: { horizontal: "center", vertical: "center" },
+          };
+        }
+      }
 
-      // Add BOM for Excel to recognize UTF-8
-      const bom = "\uFEFF";
-      const blob = new Blob([bom + csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `Data_Pengguna_GEMAS_${new Date().toISOString().split("T")[0]}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Data Pengguna");
+
+      // Generate filename: Data_Seluruh_Pengguna_GEMAS_DD-MM-YYYY.xlsx
+      const now = new Date();
+      const dd = String(now.getDate()).padStart(2, "0");
+      const mm = String(now.getMonth() + 1).padStart(2, "0");
+      const yyyy = now.getFullYear();
+      const fileName = `Data_Seluruh_Pengguna_GEMAS_${dd}-${mm}-${yyyy}.xlsx`;
+
+      // Write file and trigger download
+      XLSX.writeFile(wb, fileName);
 
       toast({
-        title: "Download berhasil",
-        description: `Data ${userStats.length} pengguna telah diunduh dalam format Excel (CSV).`,
+        title: "Export berhasil",
+        description: `${allUsers.length} pengguna dengan ${allChildren.length} data anak dan ${allConsultations.length} konsultasi telah diekspor ke ${fileName}.`,
       });
     } catch (err) {
       console.error("Download error:", err);
       toast({
         title: "Gagal download",
-        description: "Terjadi kesalahan saat mengunduh data.",
+        description: "Terjadi kesalahan saat mengunduh data. Coba lagi.",
         variant: "destructive",
       });
     } finally {
@@ -222,16 +356,16 @@ export function AdminUsersView() {
             </Button>
             <Button
               onClick={handleDownloadExcel}
-              disabled={downloading || userStats.length === 0}
+              disabled={downloading}
               className="rounded-full bg-green-600 hover:bg-green-700 text-white"
               size="sm"
             >
               {downloading ? (
                 <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
               ) : (
-                <Download className="h-4 w-4 mr-1.5" />
+                <FileSpreadsheet className="h-4 w-4 mr-1.5" />
               )}
-              {downloading ? "Mengunduh..." : "Download Excel"}
+              {downloading ? "Mengunduh data..." : "Export Excel (Semua Data)"}
             </Button>
           </div>
         </div>
@@ -446,12 +580,19 @@ export function AdminUsersView() {
         {/* Download Info */}
         {userStats.length > 0 && (
           <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
-            <Download className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-            <p className="text-xs text-blue-800 leading-relaxed">
-              Klik tombol <strong>"Download Excel"</strong> di kanan atas untuk mengunduh data semua pengguna
-              dalam format Excel (CSV). File akan berisi: No, Nama Orang Tua, Email, Nomor Telepon, Alamat,
-              Jumlah Anak, Nama Anak, Jumlah Konsultasi, dan Tanggal Daftar.
-            </p>
+            <FileSpreadsheet className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+            <div className="text-xs text-blue-800 leading-relaxed">
+              <p className="mb-1">
+                Klik tombol <strong>"Export Excel (Semua Data)"</strong> di kanan atas untuk mengunduh
+                <strong> seluruh data pengguna dari database</strong> (tidak dibatasi pagination/filter).
+              </p>
+              <p>
+                File <code className="bg-blue-100 px-1 rounded">.xlsx</code> akan berisi: No, Nama Orang Tua,
+                Email, No. Telepon, Alamat, Nama Anak, Jenis Kelamin, Tanggal Lahir Anak, Berat Badan (kg),
+                Tinggi Badan (cm), Jumlah Konsultasi, Tanggal Konsultasi Terakhir, dan Tanggal Daftar.
+                Jika satu orang tua memiliki beberapa anak, akan dibuat satu baris per anak.
+              </p>
+            </div>
           </div>
         )}
 

@@ -355,6 +355,14 @@ interface AuthState {
   restoreSession: () => Promise<void>;
   refreshData: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ success: boolean; message: string }>;
+
+  // Export helper: fetch ALL users + children + consultations from Supabase
+  // (no pagination, no limit) for Excel export
+  fetchAllDataForExport: () => Promise<{
+    users: UserProfile[];
+    children: ChildProfile[];
+    consultations: Consultation[];
+  }>;
 }
 
 // =====================================================
@@ -1851,6 +1859,77 @@ export const useAuthStore = create<AuthState>()(
           success: false,
           message: "Reset password tidak tersedia di mode offline. Hubungi admin untuk reset manual.",
         };
+      },
+
+      fetchAllDataForExport: async () => {
+        const result = {
+          users: [] as UserProfile[],
+          children: [] as ChildProfile[],
+          consultations: [] as Consultation[],
+        };
+
+        // If Supabase is not configured, return local data
+        if (!isSupabaseConfigured || !supabase) {
+          const state = get();
+          return {
+            users: state.users.filter((u) => u.role === "user"),
+            children: state.children,
+            consultations: state.consultations,
+          };
+        }
+
+        // Fetch ALL profiles (no pagination) - admin can read all
+        try {
+          const { data: profileRows, error: profileErr } = await supabase
+            .from("profiles")
+            .select("*")
+            .order("created_at", { ascending: true });
+
+          if (profileErr) {
+            console.warn("[fetchAllDataForExport] profiles error:", profileErr.message);
+          } else if (profileRows) {
+            result.users = (profileRows as ProfileRow[])
+              .map((row) => mapProfileRow(row))
+              .filter((u) => u.role === "user");
+          }
+        } catch (err) {
+          console.warn("[fetchAllDataForExport] profiles exception:", err);
+        }
+
+        // Fetch ALL children (no pagination)
+        try {
+          const { data: childRows, error: childErr } = await supabase
+            .from("children")
+            .select("*")
+            .order("created_at", { ascending: true });
+
+          if (childErr) {
+            console.warn("[fetchAllDataForExport] children error:", childErr.message);
+          } else if (childRows) {
+            result.children = (childRows as ChildRow[]).map(mapChildRow);
+          }
+        } catch (err) {
+          console.warn("[fetchAllDataForExport] children exception:", err);
+        }
+
+        // Fetch ALL consultations from broadcast_consultations (no pagination)
+        // This is the table that has all consultations (no RLS)
+        try {
+          const { data: consultRows, error: consultErr } = await supabase
+            .from("broadcast_consultations")
+            .select("*")
+            .order("created_at", { ascending: true });
+
+          if (consultErr) {
+            console.warn("[fetchAllDataForExport] consultations error:", consultErr.message);
+          } else if (consultRows) {
+            result.consultations = (consultRows as ConsultationRow[]).map(mapConsultationRow);
+          }
+        } catch (err) {
+          console.warn("[fetchAllDataForExport] consultations exception:", err);
+        }
+
+        return result;
       },
     }),
     {
