@@ -1,0 +1,1413 @@
+     1→"use client";
+     2→
+     3→import { useState, useMemo, useEffect } from "react";
+     4→import {
+     5→  Plus,
+     6→  Pencil,
+     7→  Trash2,
+     8→  Eye,
+     9→  EyeOff,
+    10→  ExternalLink,
+    11→  FileVideo,
+    12→  FileImage,
+    13→  FileText,
+    14→  Newspaper,
+    15→  LayoutGrid,
+    16→  Search,
+    17→  X,
+    18→  Save,
+    19→  ArrowUp,
+    20→  ArrowDown,
+    21→  Upload,
+    22→  Youtube,
+    23→  Link as LinkIcon,
+    24→} from "lucide-react";
+    25→import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+    26→import { Badge } from "@/components/ui/badge";
+    27→import { Button } from "@/components/ui/button";
+    28→import { Input } from "@/components/ui/input";
+    29→import { Label } from "@/components/ui/label";
+    30→import { Textarea } from "@/components/ui/textarea";
+    31→import {
+    32→  Select,
+    33→  SelectContent,
+    34→  SelectItem,
+    35→  SelectTrigger,
+    36→  SelectValue,
+    37→} from "@/components/ui/select";
+    38→import {
+    39→  Dialog,
+    40→  DialogContent,
+    41→  DialogHeader,
+    42→  DialogTitle,
+    43→  DialogDescription,
+    44→  DialogFooter,
+    45→} from "@/components/ui/dialog";
+    46→import {
+    47→  AlertDialog,
+    48→  AlertDialogAction,
+    49→  AlertDialogCancel,
+    50→  AlertDialogContent,
+    51→  AlertDialogDescription,
+    52→  AlertDialogFooter,
+    53→  AlertDialogHeader,
+    54→  AlertDialogTitle,
+    55→} from "@/components/ui/alert-dialog";
+    56→import { useToast } from "@/hooks/use-toast";
+    57→import {
+    58→  useContentStore,
+    59→  type EducationalContent,
+    60→  type ContentType,
+    61→  type ContentCategory,
+    62→  type VideoSource,
+    63→  CONTENT_TYPE_LABELS,
+    64→  CONTENT_CATEGORIES,
+    65→  VIDEO_CATEGORIES,
+    66→} from "@/lib/gemas/content-store";
+    67→import { useAuthStore } from "@/lib/gemas/auth-store";
+    68→import { useGemasStore } from "@/lib/gemas/store";
+    69→
+    70→// =====================================================
+    71→// TYPES & CONSTANTS
+    72→// =====================================================
+    73→
+    74→type FilterTabKey = "all" | ContentType;
+    75→
+    76→interface FilterTab {
+    77→  key: FilterTabKey;
+    78→  label: string;
+    79→}
+    80→
+    81→const FILTER_TABS: FilterTab[] = [
+    82→  { key: "all", label: "Semua" },
+    83→  { key: "video", label: "Video Edukasi" },
+    84→  { key: "image", label: "Media/Gambar" },
+    85→  { key: "pdf", label: "Materi PDF" },
+    86→  { key: "article", label: "Artikel" },
+    87→  { key: "banner", label: "Banner" },
+    88→];
+    89→
+    90→interface ContentFormData {
+    91→  title: string;
+    92→  description: string;
+    93→  contentType: ContentType;
+    94→  category: ContentCategory;
+    95→  videoSource: VideoSource;
+    96→  externalUrl: string;
+    97→  mediaUrl: string;
+    98→  thumbnailUrl: string;
+    99→  articleContent: string;
+   100→  duration: string;
+   101→  isActive: boolean;
+   102→  displayOrder: number;
+   103→  fileSize: string;
+   104→  mediaFileName: string;
+   105→  thumbnailFileName: string;
+   106→}
+   107→
+   108→const DEFAULT_FORM: ContentFormData = {
+   109→  title: "",
+   110→  description: "",
+   111→  contentType: "video",
+   112→  category: "MP-ASI",
+   113→  videoSource: "upload",
+   114→  externalUrl: "",
+   115→  mediaUrl: "",
+   116→  thumbnailUrl: "",
+   117→  articleContent: "",
+   118→  duration: "",
+   119→  isActive: true,
+   120→  displayOrder: 1,
+   121→  fileSize: "",
+   122→  mediaFileName: "",
+   123→  thumbnailFileName: "",
+   124→};
+   125→
+   126→const VIDEO_SOURCE_OPTIONS: {
+   127→  value: VideoSource;
+   128→  label: string;
+   129→  icon: React.ComponentType<{ className?: string }>;
+   130→}[] = [
+   131→  { value: "upload", label: "Upload", icon: Upload },
+   132→  { value: "youtube", label: "YouTube", icon: Youtube },
+   133→  { value: "vimeo", label: "Vimeo", icon: ExternalLink },
+   134→  { value: "url", label: "URL Langsung", icon: LinkIcon },
+   135→];
+   136→
+   137→const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB warning threshold
+   138→
+   139→// =====================================================
+   140→// HELPERS
+   141→// =====================================================
+   142→
+   143→function getContentTypeIcon(
+   144→  type: ContentType
+   145→): React.ComponentType<{ className?: string }> {
+   146→  switch (type) {
+   147→    case "video":
+   148→      return FileVideo;
+   149→    case "image":
+   150→      return FileImage;
+   151→    case "pdf":
+   152→      return FileText;
+   153→    case "article":
+   154→      return Newspaper;
+   155→    case "banner":
+   156→      return LayoutGrid;
+   157→    default:
+   158→      return FileText;
+   159→  }
+   160→}
+   161→
+   162→function formatFileSize(bytes: number): string {
+   163→  if (bytes < 1024) return `${bytes} B`;
+   164→  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+   165→  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+   166→}
+   167→
+   168→function fileToDataUrl(file: File): Promise<string> {
+   169→  return new Promise((resolve, reject) => {
+   170→    const reader = new FileReader();
+   171→    reader.onload = () => resolve(reader.result as string);
+   172→    reader.onerror = () => reject(new Error("FileReader error"));
+   173→    reader.readAsDataURL(file);
+   174→  });
+   175→}
+   176→
+   177→function getMediaAccept(type: ContentType): string {
+   178→  switch (type) {
+   179→    case "video":
+   180→      return "video/*";
+   181→    case "image":
+   182→      return "image/*";
+   183→    case "pdf":
+   184→      return ".pdf,application/pdf";
+   185→    default:
+   186→      return "";
+   187→  }
+   188→}
+   189→
+   190→function getMediaAcceptLabel(type: ContentType): string {
+   191→  switch (type) {
+   192→    case "video":
+   193→      return "video (MP4, WebM, MOV)";
+   194→    case "image":
+   195→      return "gambar (JPG, PNG, WebP)";
+   196→    case "pdf":
+   197→      return "PDF";
+   198→    default:
+   199→      return "file";
+   200→  }
+   201→}
+   202→
+   203→// =====================================================
+   204→// COMPONENT
+   205→// =====================================================
+   206→
+   207→export function EditWebsiteView() {
+   208→  const { toast } = useToast();
+   209→  const { setView } = useGemasStore();
+   210→  const isAdmin = useAuthStore((s) => s.isAdmin);
+   211→  const getCurrentUser = useAuthStore((s) => s.getCurrentUser);
+   212→
+   213→  const contents = useContentStore((s) => s.contents);
+   214→  const addContent = useContentStore((s) => s.addContent);
+   215→  const updateContent = useContentStore((s) => s.updateContent);
+   216→  const deleteContent = useContentStore((s) => s.deleteContent);
+   217→  const toggleActive = useContentStore((s) => s.toggleActive);
+   218→  const updateOrder = useContentStore((s) => s.updateOrder);
+   219→
+   220→  // Hydration-safe mount flag
+   221→  const [mounted, setMounted] = useState(false);
+   222→  useEffect(() => {
+   223→    setMounted(true);
+   224→  }, []);
+   225→
+   226→  // Redirect non-admins (safe effect — no derived state sync)
+   227→  useEffect(() => {
+   228→    if (mounted && !isAdmin) {
+   229→      toast({
+   230→        title: "Akses ditolak",
+   231→        description: "Silakan login sebagai admin terlebih dahulu.",
+   232→        variant: "destructive",
+   233→      });
+   234→      setView("admin-login");
+   235→    }
+   236→  }, [mounted, isAdmin, setView, toast]);
+   237→
+   238→  // UI state
+   239→  const [activeFilter, setActiveFilter] = useState<FilterTabKey>("all");
+   240→  const [searchQuery, setSearchQuery] = useState("");
+   241→  const [dialogOpen, setDialogOpen] = useState(false);
+   242→  const [editingId, setEditingId] = useState<string | null>(null);
+   243→  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+   244→  const [submitting, setSubmitting] = useState(false);
+   245→  const [processingFile, setProcessingFile] = useState(false);
+   246→  const [form, setForm] = useState<ContentFormData>(DEFAULT_FORM);
+   247→
+   248→  // Sorted (by displayOrder) — reactive to store changes
+   249→  const sortedContents = useMemo(() => {
+   250→    return [...contents].sort((a, b) => a.displayOrder - b.displayOrder);
+   251→  }, [contents]);
+   252→
+   253→  // Filtered by tab + search
+   254→  const filteredContents = useMemo(() => {
+   255→    let list = sortedContents;
+   256→    if (activeFilter !== "all") {
+   257→      list = list.filter((c) => c.contentType === activeFilter);
+   258→    }
+   259→    const q = searchQuery.trim().toLowerCase();
+   260→    if (q) {
+   261→      list = list.filter((c) => c.title.toLowerCase().includes(q));
+   262→    }
+   263→    return list;
+   264→  }, [sortedContents, activeFilter, searchQuery]);
+   265→
+   266→  // Counts per tab
+   267→  const tabCounts = useMemo(() => {
+   268→    const map: Record<FilterTabKey, number> = {
+   269→      all: sortedContents.length,
+   270→      video: 0,
+   271→      image: 0,
+   272→      pdf: 0,
+   273→      article: 0,
+   274→      banner: 0,
+   275→    };
+   276→    sortedContents.forEach((c) => {
+   277→      map[c.contentType] = (map[c.contentType] ?? 0) + 1;
+   278→    });
+   279→    return map;
+   280→  }, [sortedContents]);
+   281→
+   282→  // Available categories based on content type
+   283→  const availableCategories = useMemo<ContentCategory[]>(() => {
+   284→    return form.contentType === "video" ? VIDEO_CATEGORIES : CONTENT_CATEGORIES;
+   285→  }, [form.contentType]);
+   286→
+   287→  // =====================================================
+   288→  // HANDLERS
+   289→  // =====================================================
+   290→
+   291→  const handleOpenAdd = () => {
+   292→    const maxOrder =
+   293→      sortedContents.length > 0
+   294→        ? Math.max(...sortedContents.map((c) => c.displayOrder))
+   295→        : 0;
+   296→    setForm({ ...DEFAULT_FORM, displayOrder: maxOrder + 1 });
+   297→    setEditingId(null);
+   298→    setDialogOpen(true);
+   299→  };
+   300→
+   301→  const handleOpenEdit = (content: EducationalContent) => {
+   302→    setForm({
+   303→      title: content.title,
+   304→      description: content.description,
+   305→      contentType: content.contentType,
+   306→      category: content.category,
+   307→      videoSource: content.videoSource ?? "upload",
+   308→      externalUrl: content.externalUrl ?? "",
+   309→      mediaUrl: content.mediaUrl ?? "",
+   310→      thumbnailUrl: content.thumbnailUrl ?? "",
+   311→      articleContent: content.articleContent ?? "",
+   312→      duration: content.duration ?? "",
+   313→      isActive: content.isActive,
+   314→      displayOrder: content.displayOrder,
+   315→      fileSize: content.fileSize ?? "",
+   316→      mediaFileName: content.mediaUrl ? content.mediaUrl.split("/").pop() ?? "" : "",
+   317→      thumbnailFileName: content.thumbnailUrl
+   318→        ? content.thumbnailUrl.split("/").pop() ?? ""
+   319→        : "",
+   320→    });
+   321→    setEditingId(content.id);
+   322→    setDialogOpen(true);
+   323→  };
+   324→
+   325→  const handleCloseDialog = () => {
+   326→    setDialogOpen(false);
+   327→    setEditingId(null);
+   328→  };
+   329→
+   330→  const handleContentTypeChange = (type: ContentType) => {
+   331→    setForm((prev) => {
+   332→      const validCategories =
+   333→        type === "video" ? VIDEO_CATEGORIES : CONTENT_CATEGORIES;
+   334→      const categoryValid = validCategories.includes(prev.category);
+   335→      return {
+   336→        ...prev,
+   337→        contentType: type,
+   338→        category: categoryValid ? prev.category : validCategories[0],
+   339→        // Reset media fields when changing type to avoid stale data
+   340→        mediaUrl: "",
+   341→        externalUrl: "",
+   342→        mediaFileName: "",
+   343→        fileSize: "",
+   344→        videoSource: type === "video" ? prev.videoSource : "upload",
+   345→      };
+   346→    });
+   347→  };
+   348→
+   349→  const handleVideoSourceChange = (source: VideoSource) => {
+   350→    setForm((prev) => ({
+   351→      ...prev,
+   352→      videoSource: source,
+   353→      // Clear media fields when switching source type
+   354→      mediaUrl: "",
+   355→      externalUrl: "",
+   356→      mediaFileName: "",
+   357→      fileSize: "",
+   358→    }));
+   359→  };
+   360→
+   361→  const handleMediaFileChange = async (
+   362→    e: React.ChangeEvent<HTMLInputElement>
+   363→  ) => {
+   364→    const file = e.target.files?.[0];
+   365→    if (!file) return;
+   366→
+   367→    if (file.size > MAX_FILE_SIZE_BYTES) {
+   368→      toast({
+   369→        title: "Peringatan ukuran file",
+   370→        description:
+   371→          "File lebih besar dari 5MB dapat melebihi batas penyimpanan browser (localStorage). Pertimbangkan untuk menggunakan URL eksternal sebagai gantinya.",
+   372→        variant: "destructive",
+   373→      });
+   374→    }
+   375→
+   376→    setProcessingFile(true);
+   377→    try {
+   378→      const dataUrl = await fileToDataUrl(file);
+   379→      setForm((prev) => ({
+   380→        ...prev,
+   381→        mediaUrl: dataUrl,
+   382→        fileSize: formatFileSize(file.size),
+   383→        mediaFileName: file.name,
+   384→        externalUrl: "",
+   385→      }));
+   386→    } catch {
+   387→      toast({
+   388→        title: "Gagal memproses file",
+   389→        description: "Terjadi kesalahan saat membaca file. Coba lagi.",
+   390→        variant: "destructive",
+   391→      });
+   392→    } finally {
+   393→      setProcessingFile(false);
+   394→      // Reset input value so the same file can be re-selected
+   395→      e.target.value = "";
+   396→    }
+   397→  };
+   398→
+   399→  const handleThumbnailFileChange = async (
+   400→    e: React.ChangeEvent<HTMLInputElement>
+   401→  ) => {
+   402→    const file = e.target.files?.[0];
+   403→    if (!file) return;
+   404→
+   405→    setProcessingFile(true);
+   406→    try {
+   407→      const dataUrl = await fileToDataUrl(file);
+   408→      setForm((prev) => ({
+   409→        ...prev,
+   410→        thumbnailUrl: dataUrl,
+   411→        thumbnailFileName: file.name,
+   412→      }));
+   413→    } catch {
+   414→      toast({
+   415→        title: "Gagal memproses thumbnail",
+   416→        description: "Terjadi kesalahan saat membaca file thumbnail.",
+   417→        variant: "destructive",
+   418→      });
+   419→    } finally {
+   420→      setProcessingFile(false);
+   421→      e.target.value = "";
+   422→    }
+   423→  };
+   424→
+   425→  const handleClearMedia = () => {
+   426→    setForm((prev) => ({
+   427→      ...prev,
+   428→      mediaUrl: "",
+   429→      fileSize: "",
+   430→      mediaFileName: "",
+   431→    }));
+   432→  };
+   433→
+   434→  const handleClearThumbnail = () => {
+   435→    setForm((prev) => ({
+   436→      ...prev,
+   437→      thumbnailUrl: "",
+   438→      thumbnailFileName: "",
+   439→    }));
+   440→  };
+   441→
+   442→  const validateForm = (): string | null => {
+   443→    if (!form.title.trim()) return "Judul wajib diisi.";
+   444→    if (!form.description.trim()) return "Deskripsi wajib diisi.";
+   445→
+   446→    if (form.contentType === "video") {
+   447→      if (form.videoSource === "upload" && !form.mediaUrl) {
+   448→        return "File video wajib diunggah.";
+   449→      }
+   450→      if (form.videoSource !== "upload" && !form.externalUrl.trim()) {
+   451→        return `URL video wajib diisi untuk sumber ${form.videoSource}.`;
+   452→      }
+   453→    }
+   454→    if (form.contentType === "image" && !form.mediaUrl) {
+   455→      return "Gambar wajib diunggah.";
+   456→    }
+   457→    if (form.contentType === "pdf" && !form.mediaUrl) {
+   458→      return "File PDF wajib diunggah.";
+   459→    }
+   460→    return null;
+   461→  };
+   462→
+   463→  const handleSubmit = () => {
+   464→    const error = validateForm();
+   465→    if (error) {
+   466→      toast({ title: "Validasi gagal", description: error, variant: "destructive" });
+   467→      return;
+   468→    }
+   469→
+   470→    const adminEmail = getCurrentUser()?.email ?? "admin@gemas.id";
+   471→
+   472→    const payload = {
+   473→      title: form.title.trim(),
+   474→      description: form.description.trim(),
+   475→      contentType: form.contentType,
+   476→      category: form.category,
+   477→      mediaUrl: form.mediaUrl || undefined,
+   478→      externalUrl: form.externalUrl.trim() || undefined,
+   479→      videoSource: form.contentType === "video" ? form.videoSource : undefined,
+   480→      thumbnailUrl: form.thumbnailUrl || undefined,
+   481→      articleContent:
+   482→        form.contentType === "article" ? form.articleContent.trim() || undefined : undefined,
+   483→      isActive: form.isActive,
+   484→      displayOrder: form.displayOrder,
+   485→      duration:
+   486→        form.contentType === "video" ? form.duration.trim() || undefined : undefined,
+   487→      fileSize: form.fileSize || undefined,
+   488→      createdBy: adminEmail,
+   489→    };
+   490→
+   491→    setSubmitting(true);
+   492→    try {
+   493→      if (editingId) {
+   494→        const result = updateContent(editingId, payload);
+   495→        if (result.success) {
+   496→          toast({
+   497→            title: "Konten diperbarui",
+   498→            description: result.message,
+   499→          });
+   500→          handleCloseDialog();
+   501→        } else {
+   502→          toast({
+   503→            title: "Gagal memperbarui",
+   504→            description: result.message,
+   505→            variant: "destructive",
+   506→          });
+   507→        }
+   508→      } else {
+   509→        const result = addContent(payload);
+   510→        if (result.success) {
+   511→          toast({
+   512→            title: "Konten ditambahkan",
+   513→            description: result.message,
+   514→          });
+   515→          handleCloseDialog();
+   516→        } else {
+   517→          toast({
+   518→            title: "Gagal menambahkan",
+   519→            description: result.message,
+   520→            variant: "destructive",
+   521→          });
+   522→        }
+   523→      }
+   524→    } finally {
+   525→      setSubmitting(false);
+   526→    }
+   527→  };
+   528→
+   529→  const handleConfirmDelete = () => {
+   530→    if (!deleteTargetId) return;
+   531→    const result = deleteContent(deleteTargetId);
+   532→    if (result.success) {
+   533→      toast({ title: "Konten dihapus", description: result.message });
+   534→    } else {
+   535→      toast({
+   536→        title: "Gagal menghapus",
+   537→        description: result.message,
+   538→        variant: "destructive",
+   539→      });
+   540→    }
+   541→    setDeleteTargetId(null);
+   542→  };
+   543→
+   544→  const handleToggleActive = (id: string) => {
+   545→    toggleActive(id);
+   546→    toast({
+   547→      title: "Status diperbarui",
+   548→      description: "Status aktif konten telah diubah.",
+   549→    });
+   550→  };
+   551→
+   552→  const handleMoveUp = (content: EducationalContent) => {
+   553→    const idx = filteredContents.findIndex((c) => c.id === content.id);
+   554→    if (idx <= 0) return;
+   555→    const prev = filteredContents[idx - 1];
+   556→    updateOrder(content.id, prev.displayOrder);
+   557→    updateOrder(prev.id, content.displayOrder);
+   558→  };
+   559→
+   560→  const handleMoveDown = (content: EducationalContent) => {
+   561→    const idx = filteredContents.findIndex((c) => c.id === content.id);
+   562→    if (idx < 0 || idx >= filteredContents.length - 1) return;
+   563→    const next = filteredContents[idx + 1];
+   564→    updateOrder(content.id, next.displayOrder);
+   565→    updateOrder(next.id, content.displayOrder);
+   566→  };
+   567→
+   568→  // =====================================================
+   569→  // RENDER GUARDS
+   570→  // =====================================================
+   571→
+   572→  if (!mounted) {
+   573→    return (
+   574→      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-green-50/30">
+   575→        <div className="h-8 w-8 rounded-full border-2 border-green-600 border-t-transparent animate-spin" />
+   576→      </div>
+   577→    );
+   578→  }
+   579→
+   580→  if (!isAdmin) {
+   581→    return (
+   582→      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-green-50/30">
+   583→        <div className="text-center px-6">
+   584→          <div className="h-14 w-14 rounded-2xl bg-green-100 flex items-center justify-center mx-auto mb-3">
+   585→            <LayoutGrid className="h-7 w-7 text-green-600" />
+   586→          </div>
+   587→          <p className="text-sm font-medium text-gray-700 mb-1">
+   588→            Akses terbatas
+   589→          </p>
+   590→          <p className="text-xs text-gray-500">
+   591→            Mengalihkan ke halaman login admin...
+   592→          </p>
+   593→        </div>
+   594→      </div>
+   595→    );
+   596→  }
+   597→
+   598→  // =====================================================
+   599→  // MAIN RENDER
+   600→  // =====================================================
+   601→
+   602→  return (
+   603→    <div className="animate-fade-in min-h-screen bg-gradient-to-br from-gray-50 to-green-50/30">
+   604→      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
+   605→        {/* Header */}
+   606→        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+   607→          <div>
+   608→            <Badge
+   609→              variant="secondary"
+   610→              className="mb-1.5 bg-green-50 text-green-700 border-green-200 rounded-full"
+   611→            >
+   612→              <Pencil className="h-3 w-3 mr-1" />
+   613→              Admin Panel
+   614→            </Badge>
+   615→            <h1 className="font-heading text-2xl sm:text-3xl font-extrabold text-gray-900">
+   616→              Edit Website
+   617→            </h1>
+   618→            <p className="text-sm text-gray-600 mt-1">
+   619→              Kelola konten edukasi website
+   620→            </p>
+   621→          </div>
+   622→          <Button
+   623→            onClick={handleOpenAdd}
+   624→            className="rounded-full bg-green-600 hover:bg-green-700 text-white shadow-md self-start sm:self-auto"
+   625→          >
+   626→            <Plus className="h-4 w-4 mr-1.5" />
+   627→            Tambah Konten
+   628→          </Button>
+   629→        </div>
+   630→
+   631→        {/* Search */}
+   632→        <Card className="border-0 shadow-md rounded-2xl overflow-hidden mb-4">
+   633→          <CardContent className="pt-4 pb-4">
+   634→            <div className="relative">
+   635→              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+   636→              <Input
+   637→                type="text"
+   638→                placeholder="Cari konten berdasarkan judul..."
+   639→                value={searchQuery}
+   640→                onChange={(e) => setSearchQuery(e.target.value)}
+   641→                className="pl-10 pr-10 rounded-full"
+   642→              />
+   643→              {searchQuery && (
+   644→                <button
+   645→                  type="button"
+   646→                  onClick={() => setSearchQuery("")}
+   647→                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+   648→                  aria-label="Bersihkan pencarian"
+   649→                >
+   650→                  <X className="h-4 w-4" />
+   651→                </button>
+   652→              )}
+   653→            </div>
+   654→          </CardContent>
+   655→        </Card>
+   656→
+   657→        {/* Filter tabs */}
+   658→        <div className="mb-4 overflow-x-auto -mx-1 px-1 pb-1">
+   659→          <div className="flex gap-2 min-w-max">
+   660→            {FILTER_TABS.map((tab) => {
+   661→              const isActive = activeFilter === tab.key;
+   662→              const count = tabCounts[tab.key] ?? 0;
+   663→              return (
+   664→                <button
+   665→                  key={tab.key}
+   666→                  onClick={() => setActiveFilter(tab.key)}
+   667→                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
+   668→                    isActive
+   669→                      ? "bg-green-600 text-white shadow-md"
+   670→                      : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
+   671→                  }`}
+   672→                >
+   673→                  <span>{tab.label}</span>
+   674→                  <span
+   675→                    className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+   676→                      isActive
+   677→                        ? "bg-white/20 text-white"
+   678→                        : "bg-gray-100 text-gray-600"
+   679→                    }`}
+   680→                  >
+   681→                    {count}
+   682→                  </span>
+   683→                </button>
+   684→              );
+   685→            })}
+   686→          </div>
+   687→        </div>
+   688→
+   689→        {/* Content list */}
+   690→        <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
+   691→          <CardHeader className="bg-white pb-3 hidden sm:block">
+   692→            <div className="grid grid-cols-12 gap-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+   693→              <div className="col-span-4">Judul</div>
+   694→              <div className="col-span-2">Jenis</div>
+   695→              <div className="col-span-2">Kategori</div>
+   696→              <div className="col-span-1">Status</div>
+   697→              <div className="col-span-1 text-center">Urutan</div>
+   698→              <div className="col-span-2 text-right">Aksi</div>
+   699→            </div>
+   700→          </CardHeader>
+   701→          <CardContent className="pt-0">
+   702→            {filteredContents.length === 0 ? (
+   703→              <div className="text-center py-12">
+   704→                <div className="h-16 w-16 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-3">
+   705→                  <LayoutGrid className="h-8 w-8 text-gray-400" />
+   706→                </div>
+   707→                <p className="text-sm font-medium text-gray-700">
+   708→                  {searchQuery || activeFilter !== "all"
+   709→                    ? "Tidak ada konten yang cocok dengan filter."
+   710→                    : "Belum ada konten. Klik \"Tambah Konten\" untuk mulai."}
+   711→                </p>
+   712→                {(searchQuery || activeFilter !== "all") && (
+   713→                  <Button
+   714→                    onClick={() => {
+   715→                      setSearchQuery("");
+   716→                      setActiveFilter("all");
+   717→                    }}
+   718→                    variant="outline"
+   719→                    size="sm"
+   720→                    className="mt-3 rounded-full"
+   721→                  >
+   722→                    Reset Filter
+   723→                  </Button>
+   724→                )}
+   725→              </div>
+   726→            ) : (
+   727→              <>
+   728→                {/* Desktop: table */}
+   729→                <div className="hidden sm:block divide-y divide-gray-100">
+   730→                  {filteredContents.map((content, idx) => {
+   731→                    const TypeIcon = getContentTypeIcon(content.contentType);
+   732→                    const isFirst = idx === 0;
+   733→                    const isLast = idx === filteredContents.length - 1;
+   734→                    return (
+   735→                      <div
+   736→                        key={content.id}
+   737→                        className="grid grid-cols-12 gap-3 py-3.5 px-1 hover:bg-green-50/40 rounded-lg transition-colors items-center"
+   738→                      >
+   739→                        <div className="col-span-4">
+   740→                          <div className="flex items-start gap-2.5">
+   741→                            <div className="h-9 w-9 rounded-xl bg-green-50 text-green-600 flex items-center justify-center flex-shrink-0">
+   742→                              <TypeIcon className="h-4 w-4" />
+   743→                            </div>
+   744→                            <div className="min-w-0">
+   745→                              <p className="text-sm font-semibold text-gray-900 truncate">
+   746→                                {content.title}
+   747→                              </p>
+   748→                              <p className="text-[11px] text-gray-500 line-clamp-1">
+   749→                                {content.description}
+   750→                              </p>
+   751→                              {content.videoSource &&
+   752→                                content.videoSource !== "upload" &&
+   753→                                content.externalUrl && (
+   754→                                  <div className="flex items-center gap-1 text-[10px] text-gray-400 mt-0.5">
+   755→                                    <ExternalLink className="h-2.5 w-2.5" />
+   756→                                    <span className="truncate max-w-[180px]">
+   757→                                      {content.externalUrl}
+   758→                                    </span>
+   759→                                  </div>
+   760→                                )}
+   761→                            </div>
+   762→                          </div>
+   763→                        </div>
+   764→                        <div className="col-span-2">
+   765→                          <span className="text-xs text-gray-700">
+   766→                            {CONTENT_TYPE_LABELS[content.contentType]}
+   767→                          </span>
+   768→                        </div>
+   769→                        <div className="col-span-2">
+   770→                          <Badge
+   771→                            variant="secondary"
+   772→                            className="bg-gray-100 text-gray-700 border-0 rounded-full text-[10px]"
+   773→                          >
+   774→                            {content.category}
+   775→                          </Badge>
+   776→                        </div>
+   777→                        <div className="col-span-1">
+   778→                          <Badge
+   779→                            className={`border-0 rounded-full text-[10px] ${
+   780→                              content.isActive
+   781→                                ? "bg-green-100 text-green-700"
+   782→                                : "bg-gray-100 text-gray-500"
+   783→                            }`}
+   784→                          >
+   785→                            {content.isActive ? "Aktif" : "Tidak Aktif"}
+   786→                          </Badge>
+   787→                        </div>
+   788→                        <div className="col-span-1 text-center">
+   789→                          <span className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-gray-100 text-gray-700 text-xs font-semibold">
+   790→                            {content.displayOrder}
+   791→                          </span>
+   792→                        </div>
+   793→                        <div className="col-span-2 flex items-center justify-end gap-1">
+   794→                          <button
+   795→                            onClick={() => handleMoveUp(content)}
+   796→                            disabled={isFirst}
+   797→                            className="h-8 w-8 rounded-full hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-gray-600"
+   798→                            aria-label="Pindah ke atas"
+   799→                          >
+   800→                            <ArrowUp className="h-3.5 w-3.5" />
+   801→                          </button>
+   802→                          <button
+   803→                            onClick={() => handleMoveDown(content)}
+   804→                            disabled={isLast}
+   805→                            className="h-8 w-8 rounded-full hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-gray-600"
+   806→                            aria-label="Pindah ke bawah"
+   807→                          >
+   808→                            <ArrowDown className="h-3.5 w-3.5" />
+   809→                          </button>
+   810→                          <button
+   811→                            onClick={() => handleOpenEdit(content)}
+   812→                            className="h-8 w-8 rounded-full hover:bg-green-100 flex items-center justify-center text-green-700"
+   813→                            aria-label="Edit"
+   814→                          >
+   815→                            <Pencil className="h-3.5 w-3.5" />
+   816→                          </button>
+   817→                          <button
+   818→                            onClick={() => handleToggleActive(content.id)}
+   819→                            className={`h-8 w-8 rounded-full hover:bg-green-100 flex items-center justify-center ${
+   820→                              content.isActive ? "text-green-700" : "text-gray-400"
+   821→                            }`}
+   822→                            aria-label={
+   823→                              content.isActive
+   824→                                ? "Nonaktifkan konten"
+   825→                                : "Aktifkan konten"
+   826→                            }
+   827→                          >
+   828→                            {content.isActive ? (
+   829→                              <Eye className="h-3.5 w-3.5" />
+   830→                            ) : (
+   831→                              <EyeOff className="h-3.5 w-3.5" />
+   832→                            )}
+   833→                          </button>
+   834→                          <button
+   835→                            onClick={() => setDeleteTargetId(content.id)}
+   836→                            className="h-8 w-8 rounded-full hover:bg-red-100 flex items-center justify-center text-red-600"
+   837→                            aria-label="Hapus"
+   838→                          >
+   839→                            <Trash2 className="h-3.5 w-3.5" />
+   840→                          </button>
+   841→                        </div>
+   842→                      </div>
+   843→                    );
+   844→                  })}
+   845→                </div>
+   846→
+   847→                {/* Mobile: stacked cards */}
+   848→                <div className="sm:hidden divide-y divide-gray-100">
+   849→                  {filteredContents.map((content, idx) => {
+   850→                    const TypeIcon = getContentTypeIcon(content.contentType);
+   851→                    const isFirst = idx === 0;
+   852→                    const isLast = idx === filteredContents.length - 1;
+   853→                    return (
+   854→                      <div key={content.id} className="py-4 space-y-3">
+   855→                        <div className="flex items-start gap-2.5">
+   856→                          <div className="h-10 w-10 rounded-xl bg-green-50 text-green-600 flex items-center justify-center flex-shrink-0">
+   857→                            <TypeIcon className="h-5 w-5" />
+   858→                          </div>
+   859→                          <div className="min-w-0 flex-1">
+   860→                            <p className="text-sm font-semibold text-gray-900">
+   861→                              {content.title}
+   862→                            </p>
+   863→                            <p className="text-xs text-gray-500 line-clamp-2 mt-0.5">
+   864→                              {content.description}
+   865→                            </p>
+   866→                          </div>
+   867→                          <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 text-gray-700 text-[10px] font-semibold flex-shrink-0">
+   868→                            {content.displayOrder}
+   869→                          </span>
+   870→                        </div>
+   871→                        <div className="flex flex-wrap items-center gap-1.5 pl-12">
+   872→                          <Badge
+   873→                            variant="secondary"
+   874→                            className="bg-gray-100 text-gray-700 border-0 rounded-full text-[10px]"
+   875→                          >
+   876→                            {CONTENT_TYPE_LABELS[content.contentType]}
+   877→                          </Badge>
+   878→                          <Badge
+   879→                            variant="secondary"
+   880→                            className="bg-green-50 text-green-700 border-0 rounded-full text-[10px]"
+   881→                          >
+   882→                            {content.category}
+   883→                          </Badge>
+   884→                          <Badge
+   885→                            className={`border-0 rounded-full text-[10px] ${
+   886→                              content.isActive
+   887→                                ? "bg-green-100 text-green-700"
+   888→                                : "bg-gray-100 text-gray-500"
+   889→                            }`}
+   890→                          >
+   891→                            {content.isActive ? "Aktif" : "Tidak Aktif"}
+   892→                          </Badge>
+   893→                        </div>
+   894→                        <div className="flex items-center gap-1.5 pl-12">
+   895→                          <Button
+   896→                            onClick={() => handleMoveUp(content)}
+   897→                            disabled={isFirst}
+   898→                            variant="outline"
+   899→                            size="sm"
+   900→                            className="rounded-full h-8 w-8 p-0 disabled:opacity-30"
+   901→                            aria-label="Pindah ke atas"
+   902→                          >
+   903→                            <ArrowUp className="h-3.5 w-3.5" />
+   904→                          </Button>
+   905→                          <Button
+   906→                            onClick={() => handleMoveDown(content)}
+   907→                            disabled={isLast}
+   908→                            variant="outline"
+   909→                            size="sm"
+   910→                            className="rounded-full h-8 w-8 p-0 disabled:opacity-30"
+   911→                            aria-label="Pindah ke bawah"
+   912→                          >
+   913→                            <ArrowDown className="h-3.5 w-3.5" />
+   914→                          </Button>
+   915→                          <Button
+   916→                            onClick={() => handleOpenEdit(content)}
+   917→                            variant="outline"
+   918→                            size="sm"
+   919→                            className="rounded-full h-8 px-3 text-green-700 border-green-200"
+   920→                          >
+   921→                            <Pencil className="h-3.5 w-3.5 mr-1" />
+   922→                            Edit
+   923→                          </Button>
+   924→                          <Button
+   925→                            onClick={() => handleToggleActive(content.id)}
+   926→                            variant="outline"
+   927→                            size="sm"
+   928→                            className={`rounded-full h-8 px-3 ${
+   929→                              content.isActive
+   930→                                ? "text-green-700 border-green-200"
+   931→                                : "text-gray-500"
+   932→                            }`}
+   933→                          >
+   934→                            {content.isActive ? (
+   935→                              <Eye className="h-3.5 w-3.5 mr-1" />
+   936→                            ) : (
+   937→                              <EyeOff className="h-3.5 w-3.5 mr-1" />
+   938→                            )}
+   939→                            {content.isActive ? "Aktif" : "Nonaktif"}
+   940→                          </Button>
+   941→                          <Button
+   942→                            onClick={() => setDeleteTargetId(content.id)}
+   943→                            variant="outline"
+   944→                            size="sm"
+   945→                            className="rounded-full h-8 w-8 p-0 text-red-600 border-red-200 hover:bg-red-50"
+   946→                            aria-label="Hapus"
+   947→                          >
+   948→                            <Trash2 className="h-3.5 w-3.5" />
+   949→                          </Button>
+   950→                        </div>
+   951→                      </div>
+   952→                    );
+   953→                  })}
+   954→                </div>
+   955→              </>
+   956→            )}
+   957→          </CardContent>
+   958→        </Card>
+   959→
+   960→        {/* Summary footer */}
+   961→        <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
+   962→          <span>
+   963→            Menampilkan{" "}
+   964→            <strong className="text-gray-700">{filteredContents.length}</strong>{" "}
+   965→            dari <strong className="text-gray-700">{sortedContents.length}</strong>{" "}
+   966→            konten
+   967→          </span>
+   968→          <button
+   969→            onClick={() => setView("admin-dashboard")}
+   970→            className="text-green-700 hover:text-green-800 font-medium"
+   971→          >
+   972→            Kembali ke Dashboard
+   973→          </button>
+   974→        </div>
+   975→      </div>
+   976→
+   977→      {/* ===================================================== */}
+   978→      {/* ADD / EDIT DIALOG */}
+   979→      {/* ===================================================== */}
+   980→      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+   981→        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl">
+   982→          <DialogHeader>
+   983→            <DialogTitle>
+   984→              {editingId ? "Edit Konten" : "Tambah Konten Baru"}
+   985→            </DialogTitle>
+   986→            <DialogDescription>
+   987→              {editingId
+   988→                ? "Perbarui informasi konten edukasi."
+   989→                : "Lengkapi formulir di bawah untuk menambahkan konten baru."}
+   990→            </DialogDescription>
+   991→          </DialogHeader>
+   992→
+   993→          <div className="space-y-4 py-2">
+   994→            {/* Judul */}
+   995→            <div className="space-y-1.5">
+   996→              <Label htmlFor="content-title">
+   997→                Judul <span className="text-red-500">*</span>
+   998→              </Label>
+   999→              <Input
+  1000→                id="content-title"
+  1001→                value={form.title}
+  1002→                onChange={(e) =>
+  1003→                  setForm((prev) => ({ ...prev, title: e.target.value }))
+  1004→                }
+  1005→                placeholder="Masukkan judul konten"
+  1006→                className="rounded-xl"
+  1007→              />
+  1008→            </div>
+  1009→
+  1010→            {/* Deskripsi */}
+  1011→            <div className="space-y-1.5">
+  1012→              <Label htmlFor="content-desc">
+  1013→                Deskripsi <span className="text-red-500">*</span>
+  1014→              </Label>
+  1015→              <Textarea
+  1016→                id="content-desc"
+  1017→                value={form.description}
+  1018→                onChange={(e) =>
+  1019→                  setForm((prev) => ({ ...prev, description: e.target.value }))
+  1020→                }
+  1021→                placeholder="Deskripsi singkat konten"
+  1022→                className="rounded-xl min-h-[80px]"
+  1023→                rows={3}
+  1024→              />
+  1025→            </div>
+  1026→
+  1027→            {/* Jenis Konten + Kategori */}
+  1028→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  1029→              <div className="space-y-1.5">
+  1030→                <Label>Jenis Konten</Label>
+  1031→                <Select
+  1032→                  value={form.contentType}
+  1033→                  onValueChange={(v) => handleContentTypeChange(v as ContentType)}
+  1034→                >
+  1035→                  <SelectTrigger className="rounded-xl">
+  1036→                    <SelectValue placeholder="Pilih jenis konten" />
+  1037→                  </SelectTrigger>
+  1038→                  <SelectContent>
+  1039→                    <SelectItem value="video">Video Edukasi</SelectItem>
+  1040→                    <SelectItem value="image">Media/Gambar</SelectItem>
+  1041→                    <SelectItem value="pdf">Materi PDF</SelectItem>
+  1042→                    <SelectItem value="article">Artikel</SelectItem>
+  1043→                    <SelectItem value="banner">Banner/Informasi</SelectItem>
+  1044→                  </SelectContent>
+  1045→                </Select>
+  1046→              </div>
+  1047→              <div className="space-y-1.5">
+  1048→                <Label>Kategori</Label>
+  1049→                <Select
+  1050→                  value={form.category}
+  1051→                  onValueChange={(v) =>
+  1052→                    setForm((prev) => ({
+  1053→                      ...prev,
+  1054→                      category: v as ContentCategory,
+  1055→                    }))
+  1056→                  }
+  1057→                >
+  1058→                  <SelectTrigger className="rounded-xl">
+  1059→                    <SelectValue placeholder="Pilih kategori" />
+  1060→                  </SelectTrigger>
+  1061→                  <SelectContent>
+  1062→                    {availableCategories.map((cat) => (
+  1063→                      <SelectItem key={cat} value={cat}>
+  1064→                        {cat}
+  1065→                      </SelectItem>
+  1066→                    ))}
+  1067→                  </SelectContent>
+  1068→                </Select>
+  1069→              </div>
+  1070→            </div>
+  1071→
+  1072→            {/* Sumber Video (only for video) */}
+  1073→            {form.contentType === "video" && (
+  1074→              <div className="space-y-1.5">
+  1075→                <Label>Sumber Video</Label>
+  1076→                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+  1077→                  {VIDEO_SOURCE_OPTIONS.map((opt) => {
+  1078→                    const isSelected = form.videoSource === opt.value;
+  1079→                    const Icon = opt.icon;
+  1080→                    return (
+  1081→                      <button
+  1082→                        key={opt.value}
+  1083→                        type="button"
+  1084→                        onClick={() => handleVideoSourceChange(opt.value)}
+  1085→                        className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
+  1086→                          isSelected
+  1087→                            ? "bg-green-600 text-white border-green-600 shadow-sm"
+  1088→                            : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+  1089→                        }`}
+  1090→                      >
+  1091→                        <Icon className="h-3.5 w-3.5" />
+  1092→                        {opt.label}
+  1093→                      </button>
+  1094→                    );
+  1095→                  })}
+  1096→                </div>
+  1097→              </div>
+  1098→            )}
+  1099→
+  1100→            {/* URL Video (youtube/vimeo/url) */}
+  1101→            {form.contentType === "video" && form.videoSource !== "upload" && (
+  1102→              <div className="space-y-1.5">
+  1103→                <Label htmlFor="external-url">
+  1104→                  URL Video{" "}
+  1105→                  <span className="text-gray-400 text-xs">
+  1106→                    ({form.videoSource === "youtube" ? "YouTube" : form.videoSource === "vimeo" ? "Vimeo" : "URL langsung"})
+  1107→                  </span>{" "}
+  1108→                  <span className="text-red-500">*</span>
+  1109→                </Label>
+  1110→                <div className="relative">
+  1111→                  <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+  1112→                  <Input
+  1113→                    id="external-url"
+  1114→                    type="url"
+  1115→                    value={form.externalUrl}
+  1116→                    onChange={(e) =>
+  1117→                      setForm((prev) => ({
+  1118→                        ...prev,
+  1119→                        externalUrl: e.target.value,
+  1120→                      }))
+  1121→                    }
+  1122→                    placeholder={
+  1123→                      form.videoSource === "youtube"
+  1124→                        ? "https://www.youtube.com/watch?v=..."
+  1125→                        : form.videoSource === "vimeo"
+  1126→                        ? "https://vimeo.com/..."
+  1127→                        : "https://..."
+  1128→                    }
+  1129→                    className="pl-10 rounded-xl"
+  1130→                  />
+  1131→                </div>
+  1132→                <p className="text-[11px] text-gray-500">
+  1133→                  Tempelkan tautan {form.videoSource} lengkap.
+  1134→                </p>
+  1135→              </div>
+  1136→            )}
+  1137→
+  1138→            {/* Upload File (video upload / image / pdf) */}
+  1139→            {((form.contentType === "video" && form.videoSource === "upload") ||
+  1140→              form.contentType === "image" ||
+  1141→              form.contentType === "pdf") && (
+  1142→              <div className="space-y-1.5">
+  1143→                <Label>
+  1144→                  Upload File ({getMediaAcceptLabel(form.contentType)}){" "}
+  1145→                  {form.contentType !== "banner" && (
+  1146→                    <span className="text-red-500">*</span>
+  1147→                  )}
+  1148→                </Label>
+  1149→                {form.mediaUrl ? (
+  1150→                  <div className="flex items-center justify-between gap-2 p-3 rounded-xl bg-green-50 border border-green-100">
+  1151→                    <div className="flex items-center gap-2 min-w-0">
+  1152→                      <div className="h-9 w-9 rounded-lg bg-white flex items-center justify-center flex-shrink-0">
+  1153→                        {form.contentType === "image" && form.mediaUrl.startsWith("data:") ? (
+  1154→                          <img
+  1155→                            src={form.mediaUrl}
+  1156→                            alt="Pratinjau gambar"
+  1157→                            className="h-9 w-9 object-cover rounded-lg"
+  1158→                          />
+  1159→                        ) : (
+  1160→                          <FileText className="h-4 w-4 text-green-600" />
+  1161→                        )}
+  1162→                      </div>
+  1163→                      <div className="min-w-0">
+  1164→                        <p className="text-xs font-medium text-gray-900 truncate">
+  1165→                          {form.mediaFileName || "File terunggah"}
+  1166→                        </p>
+  1167→                        {form.fileSize && (
+  1168→                          <p className="text-[11px] text-gray-500">
+  1169→                            {form.fileSize}
+  1170→                          </p>
+  1171→                        )}
+  1172→                      </div>
+  1173→                    </div>
+  1174→                    <button
+  1175→                      type="button"
+  1176→                      onClick={handleClearMedia}
+  1177→                      className="h-7 w-7 rounded-full hover:bg-white flex items-center justify-center text-gray-500 flex-shrink-0"
+  1178→                      aria-label="Hapus file"
+  1179→                    >
+  1180→                      <X className="h-3.5 w-3.5" />
+  1181→                    </button>
+  1182→                  </div>
+  1183→                ) : (
+  1184→                  <label
+  1185→                    htmlFor="content-media"
+  1186→                    className="flex flex-col items-center justify-center gap-1.5 p-5 rounded-xl border-2 border-dashed border-gray-200 hover:border-green-300 hover:bg-green-50/40 cursor-pointer transition-colors"
+  1187→                  >
+  1188→                    {processingFile ? (
+  1189→                      <>
+  1190→                        <div className="h-6 w-6 rounded-full border-2 border-green-600 border-t-transparent animate-spin" />
+  1191→                        <p className="text-xs text-gray-600">Memproses...</p>
+  1192→                      </>
+  1193→                    ) : (
+  1194→                      <>
+  1195→                        <Upload className="h-5 w-5 text-gray-400" />
+  1196→                        <p className="text-xs text-gray-600">
+  1197→                          Klik untuk memilih file {getMediaAcceptLabel(form.contentType)}
+  1198→                        </p>
+  1199→                        <p className="text-[10px] text-gray-400">
+  1200→                          File &gt; 5MB dapat melebihi batas penyimpanan browser
+  1201→                        </p>
+  1202→                      </>
+  1203→                    )}
+  1204→                    <input
+  1205→                      id="content-media"
+  1206→                      type="file"
+  1207→                      accept={getMediaAccept(form.contentType)}
+  1208→                      onChange={handleMediaFileChange}
+  1209→                      disabled={processingFile}
+  1210→                      className="hidden"
+  1211→                    />
+  1212→                  </label>
+  1213→                )}
+  1214→              </div>
+  1215→            )}
+  1216→
+  1217→            {/* Thumbnail (optional) */}
+  1218→            <div className="space-y-1.5">
+  1219→              <Label>Thumbnail (opsional)</Label>
+  1220→              {form.thumbnailUrl ? (
+  1221→                <div className="flex items-center justify-between gap-2 p-3 rounded-xl bg-gray-50 border border-gray-200">
+  1222→                  <div className="flex items-center gap-2 min-w-0">
+  1223→                    <img
+  1224→                      src={form.thumbnailUrl}
+  1225→                      alt="Pratinjau thumbnail"
+  1226→                      className="h-9 w-12 object-cover rounded-lg flex-shrink-0"
+  1227→                    />
+  1228→                    <p className="text-xs font-medium text-gray-900 truncate">
+  1229→                      {form.thumbnailFileName || "Thumbnail"}
+  1230→                    </p>
+  1231→                  </div>
+  1232→                  <button
+  1233→                    type="button"
+  1234→                    onClick={handleClearThumbnail}
+  1235→                    className="h-7 w-7 rounded-full hover:bg-white flex items-center justify-center text-gray-500 flex-shrink-0"
+  1236→                    aria-label="Hapus thumbnail"
+  1237→                  >
+  1238→                    <X className="h-3.5 w-3.5" />
+  1239→                  </button>
+  1240→                </div>
+  1241→              ) : (
+  1242→                <label
+  1243→                  htmlFor="content-thumbnail"
+  1244→                  className="flex items-center gap-2 p-3 rounded-xl border border-dashed border-gray-200 hover:border-green-300 hover:bg-green-50/40 cursor-pointer transition-colors"
+  1245→                >
+  1246→                  <Upload className="h-4 w-4 text-gray-400" />
+  1247→                  <span className="text-xs text-gray-600">
+  1248→                    {processingFile ? "Memproses..." : "Pilih gambar thumbnail"}
+  1249→                  </span>
+  1250→                  <input
+  1251→                    id="content-thumbnail"
+  1252→                    type="file"
+  1253→                    accept="image/*"
+  1254→                    onChange={handleThumbnailFileChange}
+  1255→                    disabled={processingFile}
+  1256→                    className="hidden"
+  1257→                  />
+  1258→                </label>
+  1259→              )}
+  1260→            </div>
+  1261→
+  1262→            {/* Artikel Content (for article type) */}
+  1263→            {form.contentType === "article" && (
+  1264→              <div className="space-y-1.5">
+  1265→                <Label htmlFor="article-content">Konten Artikel</Label>
+  1266→                <Textarea
+  1267→                  id="article-content"
+  1268→                  value={form.articleContent}
+  1269→                  onChange={(e) =>
+  1270→                    setForm((prev) => ({
+  1271→                      ...prev,
+  1272→                      articleContent: e.target.value,
+  1273→                    }))
+  1274→                  }
+  1275→                  placeholder="Tulis isi artikel di sini..."
+  1276→                  className="rounded-xl min-h-[180px] font-mono text-sm"
+  1277→                  rows={8}
+  1278→                />
+  1279→                <p className="text-[11px] text-gray-500">
+  1280→                  Mendukung teks panjang. Gunakan paragraf untuk pemisah.
+  1281→                </p>
+  1282→              </div>
+  1283→            )}
+  1284→
+  1285→            {/* Durasi (for video) */}
+  1286→            {form.contentType === "video" && (
+  1287→              <div className="space-y-1.5">
+  1288→                <Label htmlFor="content-duration">Durasi</Label>
+  1289→                <Input
+  1290→                  id="content-duration"
+  1291→                  value={form.duration}
+  1292→                  onChange={(e) =>
+  1293→                    setForm((prev) => ({ ...prev, duration: e.target.value }))
+  1294→                  }
+  1295→                  placeholder="contoh: 5:30"
+  1296→                  className="rounded-xl"
+  1297→                />
+  1298→              </div>
+  1299→            )}
+  1300→
+  1301→            {/* Status + Urutan */}
+  1302→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  1303→              <div className="space-y-1.5">
+  1304→                <Label>Status</Label>
+  1305→                <div className="grid grid-cols-2 gap-2">
+  1306→                  <button
+  1307→                    type="button"
+  1308→                    onClick={() => setForm((prev) => ({ ...prev, isActive: true }))}
+  1309→                    className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
+  1310→                      form.isActive
+  1311→                        ? "bg-green-600 text-white border-green-600"
+  1312→                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+  1313→                    }`}
+  1314→                  >
+  1315→                    <Eye className="h-3.5 w-3.5" />
+  1316→                    Aktif
+  1317→                  </button>
+  1318→                  <button
+  1319→                    type="button"
+  1320→                    onClick={() => setForm((prev) => ({ ...prev, isActive: false }))}
+  1321→                    className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
+  1322→                      !form.isActive
+  1323→                        ? "bg-gray-700 text-white border-gray-700"
+  1324→                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+  1325→                    }`}
+  1326→                  >
+  1327→                    <EyeOff className="h-3.5 w-3.5" />
+  1328→                    Tidak Aktif
+  1329→                  </button>
+  1330→                </div>
+  1331→              </div>
+  1332→              <div className="space-y-1.5">
+  1333→                <Label htmlFor="content-order">Urutan Tampil</Label>
+  1334→                <Input
+  1335→                  id="content-order"
+  1336→                  type="number"
+  1337→                  min={1}
+  1338→                  value={form.displayOrder}
+  1339→                  onChange={(e) =>
+  1340→                    setForm((prev) => ({
+  1341→                      ...prev,
+  1342→                      displayOrder: parseInt(e.target.value, 10) || 1,
+  1343→                    }))
+  1344→                  }
+  1345→                  className="rounded-xl"
+  1346→                />
+  1347→              </div>
+  1348→            </div>
+  1349→          </div>
+  1350→
+  1351→          <DialogFooter className="gap-2">
+  1352→            <Button
+  1353→              variant="outline"
+  1354→              onClick={handleCloseDialog}
+  1355→              className="rounded-full"
+  1356→              disabled={submitting}
+  1357→            >
+  1358→              Batal
+  1359→            </Button>
+  1360→            <Button
+  1361→              onClick={handleSubmit}
+  1362→              disabled={submitting || processingFile}
+  1363→              className="rounded-full bg-green-600 hover:bg-green-700 text-white"
+  1364→            >
+  1365→              {submitting ? (
+  1366→                <>
+  1367→                  <div className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin mr-1.5" />
+  1368→                  Menyimpan...
+  1369→                </>
+  1370→              ) : (
+  1371→                <>
+  1372→                  <Save className="h-4 w-4 mr-1.5" />
+  1373→                  Simpan
+  1374→                </>
+  1375→              )}
+  1376→            </Button>
+  1377→          </DialogFooter>
+  1378→        </DialogContent>
+  1379→      </Dialog>
+  1380→
+  1381→      {/* ===================================================== */}
+  1382→      {/* DELETE CONFIRMATION */}
+  1383→      {/* ===================================================== */}
+  1384→      <AlertDialog
+  1385→        open={deleteTargetId !== null}
+  1386→        onOpenChange={(open) => {
+  1387→          if (!open) setDeleteTargetId(null);
+  1388→        }}
+  1389→      >
+  1390→        <AlertDialogContent className="rounded-2xl">
+  1391→          <AlertDialogHeader>
+  1392→            <AlertDialogTitle>Hapus konten?</AlertDialogTitle>
+  1393→            <AlertDialogDescription>
+  1394→              Apakah Anda yakin ingin menghapus media ini? Tindakan ini tidak
+  1395→              dapat dibatalkan.
+  1396→            </AlertDialogDescription>
+  1397→          </AlertDialogHeader>
+  1398→          <AlertDialogFooter>
+  1399→            <AlertDialogCancel className="rounded-full">Batal</AlertDialogCancel>
+  1400→            <AlertDialogAction
+  1401→              onClick={handleConfirmDelete}
+  1402→              className="rounded-full bg-red-600 hover:bg-red-700 text-white"
+  1403→            >
+  1404→              <Trash2 className="h-4 w-4 mr-1.5" />
+  1405→              Hapus
+  1406→            </AlertDialogAction>
+  1407→          </AlertDialogFooter>
+  1408→        </AlertDialogContent>
+  1409→      </AlertDialog>
+  1410→    </div>
+  1411→  );
+  1412→}
+  1413→
