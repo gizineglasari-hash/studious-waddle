@@ -355,6 +355,7 @@ interface AuthState {
   restoreSession: () => Promise<void>;
   refreshData: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ success: boolean; message: string }>;
+  updatePassword: (newPassword: string) => Promise<{ success: boolean; message: string }>;
 
   // Export helper: fetch ALL users + children + consultations from Supabase
   // (no pagination, no limit) for Excel export
@@ -1832,25 +1833,51 @@ export const useAuthStore = create<AuthState>()(
 
         if (isSupabaseConfigured && supabase) {
           try {
+            // Determine the redirect URL for password reset.
+            // Priority:
+            // 1. NEXT_PUBLIC_SITE_URL env var (if set)
+            // 2. window.location.origin (production = Vercel URL, dev = localhost)
+            // 3. Fallback to production URL
+            let siteUrl = "";
+            if (typeof window !== "undefined") {
+              siteUrl = window.location.origin;
+            }
+            // If env var is set, use it (takes precedence over localhost)
+            const envSiteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+            if (envSiteUrl) {
+              siteUrl = envSiteUrl;
+            }
+            // Final fallback: production URL
+            if (!siteUrl || siteUrl.includes("localhost")) {
+              // Use production URL as fallback for email links
+              // This ensures reset emails always point to production
+              siteUrl = "https://koniciwa-gemas-gempita.vercel.app";
+            }
+
+            const redirectTo = `${siteUrl}/reset-password`;
+
             const { error } = await supabase.auth.resetPasswordForEmail(
               emailLower,
-              {
-                redirectTo: typeof window !== "undefined"
-                  ? `${window.location.origin}/#reset-password`
-                  : undefined,
-              }
+              { redirectTo }
             );
             if (error) {
               console.error("[Supabase resetPassword] error:", error.message);
-              return { success: false, message: error.message };
+              // Provide user-friendly error message
+              let userMessage = error.message;
+              if (error.message.includes("rate limit") || error.message.includes("Rate limit")) {
+                userMessage = "Terlalu banyak permintaan reset password. Coba lagi dalam beberapa menit.";
+              } else if (error.message.includes("not found") || error.message.includes("User not found")) {
+                userMessage = "Email tidak ditemukan. Pastikan email sudah terdaftar.";
+              }
+              return { success: false, message: userMessage };
             }
             return {
               success: true,
-              message: "Link reset password telah dikirim ke email Anda. Silakan cek inbox (dan folder spam).",
+              message: "Link reset password telah dikirim ke email Anda. Silakan periksa inbox atau folder spam.",
             };
           } catch (err) {
             console.error("[Supabase resetPassword] exception:", err);
-            return { success: false, message: "Gagal mengirim email reset password." };
+            return { success: false, message: "Gagal mengirim email reset password. Coba lagi." };
           }
         }
 
@@ -1859,6 +1886,55 @@ export const useAuthStore = create<AuthState>()(
           success: false,
           message: "Reset password tidak tersedia di mode offline. Hubungi admin untuk reset manual.",
         };
+      },
+
+      // Update password after clicking reset link from email
+      // Uses Supabase Auth session recovery (token in URL)
+      updatePassword: async (newPassword) => {
+        if (!newPassword || newPassword.length < 6) {
+          return {
+            success: false,
+            message: "Password minimal 6 karakter.",
+          };
+        }
+
+        if (!isSupabaseConfigured || !supabase) {
+          return {
+            success: false,
+            message: "Update password tidak tersedia di mode offline.",
+          };
+        }
+
+        try {
+          // Supabase automatically uses the recovery session from the email link
+          // (the URL contains a refresh_token that supabase-js picks up on page load)
+          const { error } = await supabase.auth.updateUser({
+            password: newPassword,
+          });
+
+          if (error) {
+            console.error("[Supabase updatePassword] error:", error.message);
+            let userMessage = error.message;
+            if (error.message.includes("session") || error.message.includes("Session")) {
+              userMessage = "Link reset password tidak valid atau sudah kedaluwarsa. Silakan meminta link reset password baru.";
+            }
+            return { success: false, message: userMessage };
+          }
+
+          // Sign out after password update so user must login with new password
+          await supabase.auth.signOut();
+
+          return {
+            success: true,
+            message: "Password berhasil diperbarui. Silakan login menggunakan password baru.",
+          };
+        } catch (err) {
+          console.error("[Supabase updatePassword] exception:", err);
+          return {
+            success: false,
+            message: "Gagal memperbarui password. Link mungkin sudah kedaluwarsa.",
+          };
+        }
       },
 
       fetchAllDataForExport: async () => {
