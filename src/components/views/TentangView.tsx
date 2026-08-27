@@ -49,7 +49,7 @@ export function TentangView() {
           </CardHeader>
           <CardContent className="pt-5">
             <p className="text-sm text-gray-700 leading-relaxed">
-              <strong>Koniciwa Gemas Gempita</strong> merupakan inovasi website yang menggabungkan <strong>KONICIWA (Konseling Cinta Gizi via WhatsApp)</strong>, <strong>GEMAS (Gerakan Edukasi Makanan Anak Sehat)</strong>, dan <strong>GEMPITA (Gerakan Edukasi Makanan pada Ibu Balita)</strong>. Website ini menjadi media edukasi bagi orang tua untuk memahami gizi anak, memantau pertumbuhan dan status gizi, serta menerapkan pemberian makanan yang sesuai. Dilengkapi <strong>fitur konsultasi gizi online</strong>, Koniciwa Gemas Gempita membantu orang tua memperoleh informasi dan pendampingan untuk mendukung tumbuh kembang Si Kecil secara optimal.
+              <strong>Koniciwa Gemas Gempita</strong> merupakan inovasi website yang menggabungkan <strong>KONICIWA (Konseling Cinta Gizi via WhatsApp)</strong>, <strong>GEMAS GEMPITA (Gerakan Edukasi Makanan Anak Sehat pada Ibu Balita)</strong>. Website ini menjadi media edukasi bagi orang tua untuk memahami gizi anak, memantau pertumbuhan dan status gizi, serta menerapkan pemberian makanan yang sesuai. Dilengkapi <strong>fitur konsultasi gizi online</strong>, Koniciwa Gemas Gempita membantu orang tua memperoleh informasi dan pendampingan untuk mendukung tumbuh kembang Si Kecil secara optimal.
             </p>
             <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full">
               <span className="text-sm font-semibold text-amber-800">
