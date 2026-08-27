@@ -387,6 +387,121 @@ interface AuthState {
 // consultations/notifications/children from the server.
 // =====================================================
 
+// Helper: Fetch the REAL profile UUID from Supabase by email.
+// This is critical because:
+// - children table has FK to profiles(id)
+// - If currentUserId is a localStorage-generated UUID (not in profiles),
+//   INSERT into children will fail with FK violation
+// - We need to always use the real Supabase profile UUID
+//
+// This function also fixes any stale local data:
+// - Updates currentUserId if it doesn't match the profiles table
+// - Re-tags local children with the correct userId
+// - Migrates local children to Supabase (INSERT) if they only exist locally
+async function fetchAndFixProfileUUID(email: string, currentLocalId: string): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) return;
+
+  try {
+    const { data: profileRow, error } = await supabase
+      .from("profiles")
+      .select("id, email, nama_orang_tua, nomor_telepon, alamat, role, created_at, updated_at")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (error || !profileRow) {
+      console.warn("[fetchAndFixProfileUUID] no profile found for:", email);
+      return;
+    }
+
+    const realUserId = profileRow.id;
+    if (realUserId === currentLocalId) {
+      // Already correct, nothing to fix
+      return;
+    }
+
+    console.log("[fetchAndFixProfileUUID] Fixing UUID:", currentLocalId, "→", realUserId);
+
+    // Get current state
+    const state = useAuthStore.getState();
+    const localChildren = state.children.filter((c) => c.userId === currentLocalId);
+
+    // Update currentUserId and re-tag local children
+    useAuthStore.setState((s) => ({
+      currentUserId: realUserId,
+      children: s.children.map((c) =>
+        c.userId === currentLocalId ? { ...c, userId: realUserId } : c
+      ),
+      // Also update the users array to use the real UUID
+      users: s.users.map((u) =>
+        u.id === currentLocalId
+          ? {
+              ...u,
+              id: realUserId,
+              namaOrangTua: profileRow.nama_orang_tua || u.namaOrangTua,
+              nomorTelepon: profileRow.nomor_telepon || u.nomorTelepon,
+              alamat: profileRow.alamat || u.alamat,
+            }
+          : u
+      ),
+    }));
+
+    // Migrate local children to Supabase (if they don't exist there yet)
+    for (const child of localChildren) {
+      try {
+        // Check if this child already exists in Supabase (by user_id + nama_anak + tanggal_lahir)
+        const { data: existing } = await supabase
+          .from("children")
+          .select("id")
+          .eq("user_id", realUserId)
+          .eq("nama_anak", child.namaAnak)
+          .eq("tanggal_lahir", child.tanggalLahir)
+          .maybeSingle();
+
+        if (existing) {
+          // Already in Supabase - update local ID to match
+          useAuthStore.setState((s) => ({
+            children: s.children.map((c) =>
+              c.id === child.id ? { ...c, id: existing.id, userId: realUserId } : c
+            ),
+          }));
+        } else {
+          // Not in Supabase - INSERT it
+          const { data: inserted, error: insertErr } = await supabase
+            .from("children")
+            .insert({
+              user_id: realUserId,
+              nama_anak: child.namaAnak,
+              tanggal_lahir: child.tanggalLahir,
+              jenis_kelamin: child.jenisKelamin,
+              berat_badan: child.beratBadan,
+              tinggi_badan: child.tinggiBadan,
+            })
+            .select()
+            .single();
+
+          if (!insertErr && inserted) {
+            // Update local ID to the real Supabase UUID
+            useAuthStore.setState((s) => ({
+              children: s.children.map((c) =>
+                c.id === child.id ? { ...c, id: (inserted as any).id, userId: realUserId } : c
+              ),
+            }));
+            console.log("[fetchAndFixProfileUUID] Migrated child to Supabase:", child.namaAnak);
+          } else if (insertErr) {
+            console.warn("[fetchAndFixProfileUUID] Failed to migrate child:", insertErr.message);
+          }
+        }
+      } catch (childErr) {
+        console.warn("[fetchAndFixProfileUUID] child migration exception:", childErr);
+      }
+    }
+  } catch (err) {
+    console.warn("[fetchAndFixProfileUUID] exception:", err);
+  }
+}
+
+// =====================================================
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -531,7 +646,7 @@ export const useAuthStore = create<AuthState>()(
           );
 
           if (localUser) {
-            // Among all matching users, prefer the one with a Supabase Auth UUID
+            // AMONG ALL MATCHING USERS, prefer the one with a Supabase Auth UUID
             // (i.e., the entry created at registration time when signUpData.user.id was cached).
             // This is critical: children table has FK to profiles(id), so we MUST use
             // the real Supabase UUID, not the local-generated one.
@@ -569,7 +684,11 @@ export const useAuthStore = create<AuthState>()(
               ),
             }));
 
-            // Sync with Supabase in background (to refresh token)
+            // Sync with Supabase in background:
+            // 1. Sign in to get a valid auth session
+            // 2. Fetch the REAL profile UUID from profiles table by email
+            //    (in case localStorage has stale/wrong UUID)
+            // 3. Update currentUserId to match the real Supabase UUID
             void (async () => {
               try {
                 const { data: signInData, error } =
@@ -581,16 +700,22 @@ export const useAuthStore = create<AuthState>()(
                 if (error) {
                   console.warn("[Supabase login sync] error:", error.message);
                   // Don't clear local login - user is already in
+                  // But try to fetch profile by email anyway (anon can read profiles)
+                  await fetchAndFixProfileUUID(emailLower, localUser.id);
                   return;
                 }
 
                 if (signInData.user) {
-                  // Ensure currentUserId matches the Supabase UUID
+                  // Set currentUserId to the Supabase Auth UUID
                   set({ currentUserId: signInData.user.id });
+                  // Also verify against profiles table
+                  await fetchAndFixProfileUUID(emailLower, signInData.user.id);
                   await get().refreshData();
                 }
               } catch (err) {
                 console.warn("[Supabase login sync] exception:", err);
+                // Try to fetch profile by email anyway
+                await fetchAndFixProfileUUID(emailLower, localUser.id);
               }
             })();
 
