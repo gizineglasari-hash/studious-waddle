@@ -521,9 +521,6 @@ export const useContentStore = create<ContentState>()(
         set({ isLoading: true });
         try {
           // Fetch ALL content from Supabase.
-          // After v2 RLS: anon can see all (active + inactive).
-          // Before v2 RLS (current state): anon only sees is_active=true.
-          // In that case, we preserve local drafts that aren't in Supabase yet.
           const { data, error } = await supabase
             .from("educational_contents")
             .select("*")
@@ -538,14 +535,21 @@ export const useContentStore = create<ContentState>()(
           if (data && data.length > 0) {
             const contents = (data as ContentRow[]).map(mapContentRow);
             const supabaseIds = new Set(contents.map((c) => c.id));
+            // Also build a set of titles (lowercase) to detect duplicates by title
+            // This prevents the same content appearing twice when default seed content
+            // was already inserted into Supabase with a different UUID
+            const supabaseTitles = new Set(
+              contents.map((c) => c.title.trim().toLowerCase())
+            );
 
             // Preserve local-only content:
-            // - Default seed content (id starts with "default-")
             // - Local drafts that failed to sync to Supabase (have non-UUID id)
+            // - BUT skip default seed content if the same title already exists in Supabase
+            //   (this prevents duplicates when defaults were seeded to the database)
             const localOnly = get().contents.filter((c) => {
               if (supabaseIds.has(c.id)) return false;
-              // Keep default seed content for backward compat
-              if (c.id.startsWith("default-")) return true;
+              // Skip if same title already exists in Supabase (prevents duplicates)
+              if (supabaseTitles.has(c.title.trim().toLowerCase())) return false;
               // Keep local drafts (non-UUID ids = not yet synced)
               const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.id);
               if (!isUuid) return true;
