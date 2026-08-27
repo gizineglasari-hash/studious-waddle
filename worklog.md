@@ -100,3 +100,46 @@ Stage Summary:
 - Auto-deploy ke production via GitHub push (Vercel akan rebuild otomatis)
 - SQL fix perlu dijalankan user di Supabase Dashboard: supabase-fix-content-rls.sql
 - Setelah SQL dijalankan, admin bisa langsung tambah konten dari dashboard dan akan otomatis tampil di website publik.
+
+---
+Task ID: 4
+Agent: main (Super Z)
+Task: Final polish - improved error handling, validation, Published/Draft terminology, and fallback for Draft inserts
+
+Work Log:
+- Ran end-to-end tests to verify the system works:
+  * Test 1 (Add Published): ✅ PASS
+  * Test 2 (Edit): ✅ PASS
+  * Test 3 (Draft toggle): ❌ FAIL - RLS policy "USING (is_active = true)" prevents anon from seeing draft content after toggle
+  * Test 4 (Publish from Draft): ✅ PASS
+  * Test 5 (Delete): ✅ PASS
+  * Test 6 (Persistence): ✅ PASS
+- Root cause of Test 3 failure: When admin sets content to Draft (is_active=false), the RLS SELECT policy blocks anon from reading it back. This affects cross-device sync of drafts.
+- Created supabase-fix-content-rls-v2.sql: Updated policy to allow anon SELECT on ALL content (active + inactive). Filtering for public visitors is done in frontend (VideoEdukasiView already filters c.isActive).
+- Improved content-store.ts addContent():
+  * Added fallback: if INSERT with return=representation fails due to RLS (Draft), retry without return value
+  * Trigger refreshContents after fallback insert to fetch the real UUID
+  * Better success messages: "Konten berhasil dipublikasikan dan sekarang tersedia di halaman Video dan Media Edukasi." vs "Konten berhasil disimpan sebagai Draft."
+- Improved content-store.ts updateContent():
+  * Better success messages based on isActive change
+- Improved content-store.ts refreshContents():
+  * Preserve local-only drafts (non-UUID ids) when merging with Supabase data
+  * This ensures drafts saved before v2 SQL are not lost
+- Updated EditWebsiteView.tsx:
+  * Form labels: "Status" → "Status Publikasi", "Aktif" → "Published", "Tidak Aktif" → "Draft"
+  * Added helpful hint text under status toggle explaining visibility
+  * Table badges: "Aktif/Tidak Aktif" → "Published/Draft"
+  * Toggle button text: "Aktif/Nonaktif" → "Published/Draft"
+  * handleToggleActive: async with descriptive toast messages
+  * handleSubmit: better error messages with "Periksa koneksi database dan data yang dimasukkan"
+  * Enhanced validateForm: added category validation, URL format validation, YouTube URL validation, thumbnail URL validation
+- Seeded default content to Supabase (Video MP-ASI + Buku Foto Makanan PDF) via scripts/seed-default-content.js
+- All TypeScript compiles, build succeeds.
+- E2E tests confirm: Add/Edit/Delete/Publish all work. Draft toggle works in-app (local state preserved), cross-device draft sync needs v2 SQL.
+
+Stage Summary:
+- System now works as a simple CMS: Admin adds/edits/deletes content → auto-syncs to Supabase → appears on public Video & Media Edukasi page
+- 5 of 6 e2e tests pass. Test 3 (Draft visibility cross-device) requires v2 SQL.
+- User must run supabase-fix-content-rls-v2.sql for full Draft support.
+- Default content seeded to Supabase (2 items).
+- Production deployment ready.

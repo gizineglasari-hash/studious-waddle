@@ -213,18 +213,52 @@ export const useContentStore = create<ContentState>()(
         // Sync to Supabase
         if (isSupabaseConfigured && supabase) {
           try {
+            const insertRow = toInsertRow(newContent);
+            // Try with return=representation first (returns the inserted row with real UUID)
             const { data: inserted, error } = await supabase
               .from("educational_contents")
-              .insert(toInsertRow(newContent))
+              .insert(insertRow)
               .select()
               .single();
 
             if (error) {
+              // Check if this is an RLS error (likely due to is_active=false Draft)
+              if (error.message.includes("row-level security") || error.code === "42501") {
+                // Fallback: insert without return=representation
+                // The row IS still inserted, we just can't SELECT it back
+                const { error: insertError2 } = await supabase
+                  .from("educational_contents")
+                  .insert(insertRow);
+
+                if (insertError2) {
+                  console.warn("[Supabase addContent] fallback insert error:", insertError2.message);
+                  return {
+                    success: true,
+                    message: "Konten ditambahkan lokal. Sinkronisasi Supabase gagal - jalankan SQL supabase-fix-content-rls-v2.sql.",
+                    id: localId,
+                  };
+                }
+
+                // Insert succeeded but we don't have the real UUID.
+                // Trigger a refresh to fetch it from Supabase.
+                console.log("[Supabase addContent] Draft insert succeeded (no return value). Refreshing...");
+                setTimeout(() => {
+                  void get().refreshContents();
+                }, 500);
+                return {
+                  success: true,
+                  message: data.isActive
+                    ? "Konten berhasil dipublikasikan dan sekarang tersedia di halaman Video dan Media Edukasi."
+                    : "Konten berhasil disimpan sebagai Draft.",
+                  id: localId,
+                };
+              }
+
+              // Other errors
               console.warn("[Supabase addContent] error:", error.message);
-              // Keep local copy - user will see it even if sync fails
               return {
                 success: true,
-                message: "Konten ditambahkan lokal. Sinkronisasi Supabase gagal (cek RLS policy).",
+                message: "Konten ditambahkan lokal. Sinkronisasi Supabase gagal: " + error.message,
                 id: localId,
               };
             }
@@ -239,7 +273,9 @@ export const useContentStore = create<ContentState>()(
               }));
               return {
                 success: true,
-                message: "Konten berhasil ditambahkan dan tersinkronisasi.",
+                message: data.isActive
+                  ? "Konten berhasil dipublikasikan dan sekarang tersedia di halaman Video dan Media Edukasi."
+                  : "Konten berhasil disimpan sebagai Draft.",
                 id: realId,
               };
             }
@@ -299,10 +335,17 @@ export const useContentStore = create<ContentState>()(
 
             if (error) {
               console.warn("[Supabase updateContent] error:", error.message);
-              return { success: true, message: "Konten diperbarui lokal. Sinkronisasi Supabase gagal." };
+              return { success: true, message: "Konten diperbarui lokal. Sinkronisasi Supabase gagal: " + error.message };
             }
 
-            return { success: true, message: "Konten berhasil diperbarui dan tersinkronisasi." };
+            // Build appropriate success message
+            let message = "Konten berhasil diperbarui dan tersinkronisasi.";
+            if (data.isActive === true) {
+              message = "Konten berhasil dipublikasikan dan sekarang tersedia di halaman Video dan Media Edukasi.";
+            } else if (data.isActive === false) {
+              message = "Konten berhasil diubah menjadi Draft dan tidak lagi ditampilkan di halaman publik.";
+            }
+            return { success: true, message };
           } catch (err) {
             console.warn("[Supabase updateContent] exception:", err);
             return { success: true, message: "Konten diperbarui lokal. Error sinkronisasi." };
@@ -477,8 +520,10 @@ export const useContentStore = create<ContentState>()(
         }
         set({ isLoading: true });
         try {
-          // Fetch ALL content (active + inactive) - admin needs to see all
-          // Public users will only see active (filtered on display side)
+          // Fetch ALL content from Supabase.
+          // After v2 RLS: anon can see all (active + inactive).
+          // Before v2 RLS (current state): anon only sees is_active=true.
+          // In that case, we preserve local drafts that aren't in Supabase yet.
           const { data, error } = await supabase
             .from("educational_contents")
             .select("*")
@@ -492,12 +537,21 @@ export const useContentStore = create<ContentState>()(
 
           if (data && data.length > 0) {
             const contents = (data as ContentRow[]).map(mapContentRow);
-            // Merge: replace local contents with Supabase data, but keep default content
-            // if it's not in Supabase yet (for backward compatibility)
             const supabaseIds = new Set(contents.map((c) => c.id));
-            const localOnly = get().contents.filter(
-              (c) => !supabaseIds.has(c.id) && c.id.startsWith("default-")
-            );
+
+            // Preserve local-only content:
+            // - Default seed content (id starts with "default-")
+            // - Local drafts that failed to sync to Supabase (have non-UUID id)
+            const localOnly = get().contents.filter((c) => {
+              if (supabaseIds.has(c.id)) return false;
+              // Keep default seed content for backward compat
+              if (c.id.startsWith("default-")) return true;
+              // Keep local drafts (non-UUID ids = not yet synced)
+              const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.id);
+              if (!isUuid) return true;
+              return false;
+            });
+
             set({
               contents: [...contents, ...localOnly],
               isLoading: false,

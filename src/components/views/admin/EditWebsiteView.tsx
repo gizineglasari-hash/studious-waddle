@@ -450,13 +450,29 @@ export function EditWebsiteView() {
   const validateForm = (): string | null => {
     if (!form.title.trim()) return "Judul wajib diisi.";
     if (!form.description.trim()) return "Deskripsi wajib diisi.";
+    if (!form.category) return "Kategori wajib dipilih.";
 
     if (form.contentType === "video") {
       if (form.videoSource === "upload" && !form.mediaUrl) {
         return "File video wajib diunggah.";
       }
-      if (form.videoSource !== "upload" && !form.externalUrl.trim()) {
-        return `URL video wajib diisi untuk sumber ${form.videoSource}.`;
+      if (form.videoSource !== "upload") {
+        if (!form.externalUrl.trim()) {
+          return `URL video wajib diisi untuk sumber ${form.videoSource}.`;
+        }
+        // Validate URL format
+        try {
+          new URL(form.externalUrl);
+        } catch {
+          return "URL video tidak valid. Pastikan URL dimulai dengan http:// atau https://";
+        }
+        // For YouTube source, verify it's a YouTube URL
+        if (form.videoSource === "youtube") {
+          const url = form.externalUrl.toLowerCase();
+          if (!url.includes("youtube.com") && !url.includes("youtu.be")) {
+            return "URL YouTube tidak valid. Pastikan URL berasal dari youtube.com atau youtu.be";
+          }
+        }
       }
     }
     if (form.contentType === "image" && !form.mediaUrl) {
@@ -464,6 +480,14 @@ export function EditWebsiteView() {
     }
     if (form.contentType === "pdf" && !form.mediaUrl) {
       return "File PDF wajib diunggah.";
+    }
+    // Validate thumbnail URL if provided
+    if (form.thumbnailUrl && form.thumbnailUrl.startsWith("http")) {
+      try {
+        new URL(form.thumbnailUrl);
+      } catch {
+        return "URL thumbnail tidak valid.";
+      }
     }
     return null;
   };
@@ -502,7 +526,7 @@ export function EditWebsiteView() {
         const result = await updateContent(editingId, payload);
         if (result.success) {
           toast({
-            title: "Konten diperbarui",
+            title: payload.isActive ? "Konten diperbarui" : "Draft diperbarui",
             description: result.message,
           });
           handleCloseDialog();
@@ -511,7 +535,7 @@ export function EditWebsiteView() {
         } else {
           toast({
             title: "Gagal memperbarui",
-            description: result.message,
+            description: `Konten gagal diperbarui. ${result.message}`,
             variant: "destructive",
           });
         }
@@ -519,7 +543,7 @@ export function EditWebsiteView() {
         const result = await addContent(payload);
         if (result.success) {
           toast({
-            title: "Konten ditambahkan",
+            title: payload.isActive ? "Konten dipublikasikan" : "Draft disimpan",
             description: result.message,
           });
           handleCloseDialog();
@@ -528,11 +552,18 @@ export function EditWebsiteView() {
         } else {
           toast({
             title: "Gagal menambahkan",
-            description: result.message,
+            description: `Konten gagal dipublikasikan. Periksa koneksi database dan data yang dimasukkan. ${result.message}`,
             variant: "destructive",
           });
         }
       }
+    } catch (err) {
+      console.error("Submit error:", err);
+      toast({
+        title: "Error",
+        description: "Terjadi kesalahan tak terduga. Coba lagi.",
+        variant: "destructive",
+      });
     } finally {
       setSubmitting(false);
     }
@@ -555,12 +586,18 @@ export function EditWebsiteView() {
     setDeleteTargetId(null);
   };
 
-  const handleToggleActive = (id: string) => {
+  const handleToggleActive = async (id: string) => {
+    const content = contents.find((c) => c.id === id);
+    if (!content) return;
     toggleActive(id);
     toast({
-      title: "Status diperbarui",
-      description: "Status aktif konten telah diubah.",
+      title: content.isActive ? "Diubah ke Draft" : "Dipublikasikan",
+      description: content.isActive
+        ? `Konten "${content.title}" disembunyikan dari halaman publik.`
+        : `Konten "${content.title}" sekarang tersedia di halaman Video & Media Edukasi.`,
     });
+    // Sync to Supabase
+    await refreshContents();
   };
 
   const handleMoveUp = (content: EducationalContent) => {
@@ -796,7 +833,7 @@ export function EditWebsiteView() {
                                 : "bg-gray-100 text-gray-500"
                             }`}
                           >
-                            {content.isActive ? "Aktif" : "Tidak Aktif"}
+                            {content.isActive ? "Published" : "Draft"}
                           </Badge>
                         </div>
                         <div className="col-span-1 text-center">
@@ -835,8 +872,8 @@ export function EditWebsiteView() {
                             }`}
                             aria-label={
                               content.isActive
-                                ? "Nonaktifkan konten"
-                                : "Aktifkan konten"
+                                ? "Ubah ke Draft (sembunyikan dari publik)"
+                                : "Publikasikan konten"
                             }
                           >
                             {content.isActive ? (
@@ -902,7 +939,7 @@ export function EditWebsiteView() {
                                 : "bg-gray-100 text-gray-500"
                             }`}
                           >
-                            {content.isActive ? "Aktif" : "Tidak Aktif"}
+                            {content.isActive ? "Published" : "Draft"}
                           </Badge>
                         </div>
                         <div className="flex items-center gap-1.5 pl-12">
@@ -950,7 +987,7 @@ export function EditWebsiteView() {
                             ) : (
                               <EyeOff className="h-3.5 w-3.5 mr-1" />
                             )}
-                            {content.isActive ? "Aktif" : "Nonaktif"}
+                            {content.isActive ? "Published" : "Draft"}
                           </Button>
                           <Button
                             onClick={() => setDeleteTargetId(content.id)}
@@ -1315,7 +1352,7 @@ export function EditWebsiteView() {
             {/* Status + Urutan */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>Status</Label>
+                <Label>Status Publikasi</Label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -1327,7 +1364,7 @@ export function EditWebsiteView() {
                     }`}
                   >
                     <Eye className="h-3.5 w-3.5" />
-                    Aktif
+                    Published
                   </button>
                   <button
                     type="button"
@@ -1339,9 +1376,14 @@ export function EditWebsiteView() {
                     }`}
                   >
                     <EyeOff className="h-3.5 w-3.5" />
-                    Tidak Aktif
+                    Draft
                   </button>
                 </div>
+                <p className="text-[11px] text-gray-500">
+                  {form.isActive
+                    ? "✓ Konten akan tampil di halaman publik Video & Media Edukasi"
+                    : "📝 Konten disembunyikan dari publik (hanya admin yang bisa lihat)"}
+                </p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="content-order">Urutan Tampil</Label>
