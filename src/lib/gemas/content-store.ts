@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
 
 // =====================================================
 // TYPES
@@ -42,6 +43,71 @@ export interface EducationalContent {
   createdBy: string; // admin email
   createdAt: string;
   updatedAt: string;
+}
+
+// =====================================================
+// SUPABASE ROW MAPPERS
+// =====================================================
+
+interface ContentRow {
+  id: string;
+  title: string;
+  description: string | null;
+  content_type: string;
+  category: string | null;
+  media_url: string | null;
+  external_url: string | null;
+  video_source: string | null;
+  thumbnail_url: string | null;
+  article_content: string | null;
+  is_active: boolean;
+  display_order: number;
+  duration: string | null;
+  file_size: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+function mapContentRow(row: ContentRow): EducationalContent {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description ?? "",
+    contentType: (row.content_type as ContentType) ?? "video",
+    category: (row.category as ContentCategory) ?? "Lainnya",
+    mediaUrl: row.media_url ?? undefined,
+    externalUrl: row.external_url ?? undefined,
+    videoSource: (row.video_source as VideoSource) ?? undefined,
+    thumbnailUrl: row.thumbnail_url ?? undefined,
+    articleContent: row.article_content ?? undefined,
+    isActive: row.is_active ?? true,
+    displayOrder: row.display_order ?? 0,
+    duration: row.duration ?? undefined,
+    fileSize: row.file_size ?? undefined,
+    createdBy: row.created_by ?? "admin@gemas.id",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toInsertRow(content: EducationalContent): Record<string, unknown> {
+  return {
+    title: content.title,
+    description: content.description,
+    content_type: content.contentType,
+    category: content.category,
+    media_url: content.mediaUrl ?? null,
+    external_url: content.externalUrl ?? null,
+    video_source: content.videoSource ?? null,
+    thumbnail_url: content.thumbnailUrl ?? null,
+    article_content: content.articleContent ?? null,
+    is_active: content.isActive,
+    display_order: content.displayOrder,
+    duration: content.duration ?? null,
+    file_size: content.fileSize ?? null,
+    created_by: content.createdBy,
+  };
 }
 
 // =====================================================
@@ -92,11 +158,13 @@ function generateId(): string {
 
 interface ContentState {
   contents: EducationalContent[];
+  isLoading: boolean;
+  lastRefreshedAt: string | null;
 
   // CRUD actions
-  addContent: (data: Omit<EducationalContent, "id" | "createdAt" | "updatedAt">) => { success: boolean; message: string; id?: string };
-  updateContent: (id: string, data: Partial<EducationalContent>) => { success: boolean; message: string };
-  deleteContent: (id: string) => { success: boolean; message: string };
+  addContent: (data: Omit<EducationalContent, "id" | "createdAt" | "updatedAt">) => Promise<{ success: boolean; message: string; id?: string }>;
+  updateContent: (id: string, data: Partial<EducationalContent>) => Promise<{ success: boolean; message: string }>;
+  deleteContent: (id: string) => Promise<{ success: boolean; message: string }>;
   toggleActive: (id: string) => void;
   updateOrder: (id: string, newOrder: number) => void;
 
@@ -108,14 +176,19 @@ interface ContentState {
   getContentsByCategory: (category: ContentCategory) => EducationalContent[];
   getContentById: (id: string) => EducationalContent | null;
   reorderContents: (ids: string[]) => void;
+
+  // Supabase sync
+  refreshContents: () => Promise<void>;
 }
 
 export const useContentStore = create<ContentState>()(
   persist(
     (set, get) => ({
       contents: DEFAULT_CONTENT,
+      isLoading: false,
+      lastRefreshedAt: null,
 
-      addContent: (data) => {
+      addContent: async (data) => {
         if (!data.title.trim()) {
           return { success: false, message: "Judul wajib diisi." };
         }
@@ -123,70 +196,215 @@ export const useContentStore = create<ContentState>()(
           return { success: false, message: "Jenis konten wajib dipilih." };
         }
 
+        const now = new Date().toISOString();
+        const localId = generateId();
         const newContent: EducationalContent = {
           ...data,
-          id: generateId(),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          id: localId,
+          createdAt: now,
+          updatedAt: now,
         };
 
+        // Optimistic local update
         set((state) => ({
           contents: [...state.contents, newContent],
         }));
 
-        return { success: true, message: "Konten berhasil ditambahkan.", id: newContent.id };
+        // Sync to Supabase
+        if (isSupabaseConfigured && supabase) {
+          try {
+            const { data: inserted, error } = await supabase
+              .from("educational_contents")
+              .insert(toInsertRow(newContent))
+              .select()
+              .single();
+
+            if (error) {
+              console.warn("[Supabase addContent] error:", error.message);
+              // Keep local copy - user will see it even if sync fails
+              return {
+                success: true,
+                message: "Konten ditambahkan lokal. Sinkronisasi Supabase gagal (cek RLS policy).",
+                id: localId,
+              };
+            }
+
+            if (inserted) {
+              const realId = (inserted as ContentRow).id;
+              // Replace local ID with Supabase UUID
+              set((state) => ({
+                contents: state.contents.map((c) =>
+                  c.id === localId ? { ...c, id: realId } : c
+                ),
+              }));
+              return {
+                success: true,
+                message: "Konten berhasil ditambahkan dan tersinkronisasi.",
+                id: realId,
+              };
+            }
+          } catch (err) {
+            console.warn("[Supabase addContent] exception:", err);
+            return {
+              success: true,
+              message: "Konten ditambahkan lokal. Error sinkronisasi Supabase.",
+              id: localId,
+            };
+          }
+        }
+
+        return { success: true, message: "Konten berhasil ditambahkan.", id: localId };
       },
 
-      updateContent: (id, data) => {
+      updateContent: async (id, data) => {
         const { contents } = get();
         const content = contents.find((c) => c.id === id);
         if (!content) {
           return { success: false, message: "Konten tidak ditemukan." };
         }
 
+        const now = new Date().toISOString();
+        const updatedContent = { ...content, ...data, updatedAt: now };
+
+        // Optimistic local update
         set((state) => ({
           contents: state.contents.map((c) =>
-            c.id === id
-              ? { ...c, ...data, updatedAt: new Date().toISOString() }
-              : c
+            c.id === id ? updatedContent : c
           ),
         }));
+
+        // Sync to Supabase
+        if (isSupabaseConfigured && supabase) {
+          try {
+            const updateRow: Record<string, unknown> = { updated_at: now };
+            if (data.title !== undefined) updateRow.title = data.title;
+            if (data.description !== undefined) updateRow.description = data.description;
+            if (data.contentType !== undefined) updateRow.content_type = data.contentType;
+            if (data.category !== undefined) updateRow.category = data.category;
+            if (data.mediaUrl !== undefined) updateRow.media_url = data.mediaUrl;
+            if (data.externalUrl !== undefined) updateRow.external_url = data.externalUrl;
+            if (data.videoSource !== undefined) updateRow.video_source = data.videoSource;
+            if (data.thumbnailUrl !== undefined) updateRow.thumbnail_url = data.thumbnailUrl;
+            if (data.articleContent !== undefined) updateRow.article_content = data.articleContent;
+            if (data.isActive !== undefined) updateRow.is_active = data.isActive;
+            if (data.displayOrder !== undefined) updateRow.display_order = data.displayOrder;
+            if (data.duration !== undefined) updateRow.duration = data.duration;
+            if (data.fileSize !== undefined) updateRow.file_size = data.fileSize;
+            if (data.createdBy !== undefined) updateRow.created_by = data.createdBy;
+
+            const { error } = await supabase
+              .from("educational_contents")
+              .update(updateRow)
+              .eq("id", id);
+
+            if (error) {
+              console.warn("[Supabase updateContent] error:", error.message);
+              return { success: true, message: "Konten diperbarui lokal. Sinkronisasi Supabase gagal." };
+            }
+
+            return { success: true, message: "Konten berhasil diperbarui dan tersinkronisasi." };
+          } catch (err) {
+            console.warn("[Supabase updateContent] exception:", err);
+            return { success: true, message: "Konten diperbarui lokal. Error sinkronisasi." };
+          }
+        }
 
         return { success: true, message: "Konten berhasil diperbarui." };
       },
 
-      deleteContent: (id) => {
+      deleteContent: async (id) => {
         const { contents } = get();
         const content = contents.find((c) => c.id === id);
         if (!content) {
           return { success: false, message: "Konten tidak ditemukan." };
         }
 
+        // Optimistic local delete
         set((state) => ({
           contents: state.contents.filter((c) => c.id !== id),
         }));
+
+        // Sync to Supabase
+        if (isSupabaseConfigured && supabase) {
+          try {
+            const { error } = await supabase
+              .from("educational_contents")
+              .delete()
+              .eq("id", id);
+
+            if (error) {
+              console.warn("[Supabase deleteContent] error:", error.message);
+              // Restore local copy since Supabase delete failed
+              set((state) => ({
+                contents: [...state.contents, content],
+              }));
+              return { success: false, message: `Gagal menghapus dari Supabase: ${error.message}` };
+            }
+
+            return { success: true, message: "Konten berhasil dihapus." };
+          } catch (err) {
+            console.warn("[Supabase deleteContent] exception:", err);
+            // Restore local copy
+            set((state) => ({
+              contents: [...state.contents, content],
+            }));
+            return { success: false, message: "Error sinkronisasi Supabase." };
+          }
+        }
 
         return { success: true, message: "Konten berhasil dihapus." };
       },
 
       toggleActive: (id) => {
+        const now = new Date().toISOString();
         set((state) => ({
           contents: state.contents.map((c) =>
             c.id === id
-              ? { ...c, isActive: !c.isActive, updatedAt: new Date().toISOString() }
+              ? { ...c, isActive: !c.isActive, updatedAt: now }
               : c
           ),
         }));
+
+        // Sync to Supabase
+        if (isSupabaseConfigured && supabase) {
+          const content = get().contents.find((c) => c.id === id);
+          if (content) {
+            void (async () => {
+              try {
+                await supabase
+                  .from("educational_contents")
+                  .update({ is_active: content.isActive, updated_at: now })
+                  .eq("id", id);
+              } catch (err) {
+                console.warn("[Supabase toggleActive] exception:", err);
+              }
+            })();
+          }
+        }
       },
 
       updateOrder: (id, newOrder) => {
+        const now = new Date().toISOString();
         set((state) => ({
           contents: state.contents.map((c) =>
             c.id === id
-              ? { ...c, displayOrder: newOrder, updatedAt: new Date().toISOString() }
+              ? { ...c, displayOrder: newOrder, updatedAt: now }
               : c
           ),
         }));
+
+        if (isSupabaseConfigured && supabase) {
+          void (async () => {
+            try {
+              await supabase
+                .from("educational_contents")
+                .update({ display_order: newOrder, updated_at: now })
+                .eq("id", id);
+            } catch (err) {
+              console.warn("[Supabase updateOrder] exception:", err);
+            }
+          })();
+        }
       },
 
       getAllContents: () => {
@@ -224,18 +442,83 @@ export const useContentStore = create<ContentState>()(
       },
 
       reorderContents: (ids) => {
+        const now = new Date().toISOString();
         set((state) => ({
           contents: state.contents.map((c) => {
             const newOrder = ids.indexOf(c.id);
             return newOrder >= 0
-              ? { ...c, displayOrder: newOrder + 1, updatedAt: new Date().toISOString() }
+              ? { ...c, displayOrder: newOrder + 1, updatedAt: now }
               : c;
           }),
         }));
+
+        // Bulk sync to Supabase
+        if (isSupabaseConfigured && supabase) {
+          const supa = supabase;
+          void (async () => {
+            try {
+              const updates = ids.map((id, i) =>
+                supa
+                  .from("educational_contents")
+                  .update({ display_order: i + 1, updated_at: now })
+                  .eq("id", id)
+              );
+              await Promise.all(updates);
+            } catch (err) {
+              console.warn("[Supabase reorderContents] exception:", err);
+            }
+          })();
+        }
+      },
+
+      refreshContents: async () => {
+        if (!isSupabaseConfigured || !supabase) {
+          return;
+        }
+        set({ isLoading: true });
+        try {
+          // Fetch ALL content (active + inactive) - admin needs to see all
+          // Public users will only see active (filtered on display side)
+          const { data, error } = await supabase
+            .from("educational_contents")
+            .select("*")
+            .order("display_order", { ascending: true });
+
+          if (error) {
+            console.warn("[Supabase refreshContents] error:", error.message);
+            set({ isLoading: false });
+            return;
+          }
+
+          if (data && data.length > 0) {
+            const contents = (data as ContentRow[]).map(mapContentRow);
+            // Merge: replace local contents with Supabase data, but keep default content
+            // if it's not in Supabase yet (for backward compatibility)
+            const supabaseIds = new Set(contents.map((c) => c.id));
+            const localOnly = get().contents.filter(
+              (c) => !supabaseIds.has(c.id) && c.id.startsWith("default-")
+            );
+            set({
+              contents: [...contents, ...localOnly],
+              isLoading: false,
+              lastRefreshedAt: new Date().toISOString(),
+            });
+          } else {
+            // Supabase is empty - keep defaults
+            set({ isLoading: false, lastRefreshedAt: new Date().toISOString() });
+          }
+        } catch (err) {
+          console.warn("[Supabase refreshContents] exception:", err);
+          set({ isLoading: false });
+        }
       },
     }),
     {
       name: "gemas-content-storage",
+      partialize: (state) => ({
+        contents: state.contents,
+        lastRefreshedAt: state.lastRefreshedAt,
+      }),
     }
   )
 );

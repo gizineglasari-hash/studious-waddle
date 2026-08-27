@@ -216,12 +216,20 @@ export function EditWebsiteView() {
   const deleteContent = useContentStore((s) => s.deleteContent);
   const toggleActive = useContentStore((s) => s.toggleActive);
   const updateOrder = useContentStore((s) => s.updateOrder);
+  const refreshContents = useContentStore((s) => s.refreshContents);
 
   // Hydration-safe mount flag
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Refresh contents from Supabase on mount
+  useEffect(() => {
+    if (mounted && isAdmin) {
+      refreshContents();
+    }
+  }, [mounted, isAdmin, refreshContents]);
 
   // Redirect non-admins (safe effect — no derived state sync)
   useEffect(() => {
@@ -460,7 +468,7 @@ export function EditWebsiteView() {
     return null;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const error = validateForm();
     if (error) {
       toast({ title: "Validasi gagal", description: error, variant: "destructive" });
@@ -491,13 +499,15 @@ export function EditWebsiteView() {
     setSubmitting(true);
     try {
       if (editingId) {
-        const result = updateContent(editingId, payload);
+        const result = await updateContent(editingId, payload);
         if (result.success) {
           toast({
             title: "Konten diperbarui",
             description: result.message,
           });
           handleCloseDialog();
+          // Refresh from Supabase to ensure sync
+          await refreshContents();
         } else {
           toast({
             title: "Gagal memperbarui",
@@ -506,13 +516,15 @@ export function EditWebsiteView() {
           });
         }
       } else {
-        const result = addContent(payload);
+        const result = await addContent(payload);
         if (result.success) {
           toast({
             title: "Konten ditambahkan",
             description: result.message,
           });
           handleCloseDialog();
+          // Refresh from Supabase to ensure sync
+          await refreshContents();
         } else {
           toast({
             title: "Gagal menambahkan",
@@ -526,11 +538,13 @@ export function EditWebsiteView() {
     }
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deleteTargetId) return;
-    const result = deleteContent(deleteTargetId);
+    const result = await deleteContent(deleteTargetId);
     if (result.success) {
       toast({ title: "Konten dihapus", description: result.message });
+      // Refresh from Supabase to ensure sync
+      await refreshContents();
     } else {
       toast({
         title: "Gagal menghapus",
@@ -1142,7 +1156,7 @@ export function EditWebsiteView() {
               <div className="space-y-1.5">
                 <Label>
                   Upload File ({getMediaAcceptLabel(form.contentType)}){" "}
-                  {form.contentType !== "banner" && (
+                  {(form.contentType === "video" || form.contentType === "image" || form.contentType === "pdf") && (
                     <span className="text-red-500">*</span>
                   )}
                 </Label>

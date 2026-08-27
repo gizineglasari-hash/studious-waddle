@@ -57,3 +57,46 @@ Stage Summary:
 - SQL fix-existing-data.sql disediakan sebagai backup jika perlu re-run.
 - Setelah deploy, user yang sudah login perlu logout + login lagi untuk trigger fix (clear old localStorage user ID).
 - Code changes ready untuk deploy.
+
+---
+Task ID: 3
+Agent: main (Super Z)
+Task: Admin dapat tambah/kelola materi di EditWebsite → otomatis muncul di Video dan Media Edukasi
+
+Work Log:
+- Investigasi: VideoEdukasiView.tsx menggunakan hardcoded MEDIA_ITEMS array, EditWebsiteView pakai content-store (localStorage only), tabel educational_contents Supabase kosong.
+- Test RLS: anon SELECT berfungsi (return []), tapi anon INSERT/UPDATE/DELETE diblokir (policy lama hanya untuk "authenticated").
+- Buat SQL fix: /home/z/my-project/supabase-fix-content-rls.sql - update policy agar anon + authenticated bisa INSERT/UPDATE/DELETE. SELECT tetap dibatasi is_active = true untuk public.
+- Rewrite content-store.ts:
+  * Tambah import supabase & isSupabaseConfigured
+  * Tambah ContentRow interface & mapContentRow/toInsertRow helpers
+  * Ubah addContent/updateContent/deleteContent menjadi async
+  * Setiap operasi: optimistic local update → sync ke Supabase → replace local ID dengan Supabase UUID
+  * toggleActive/updateOrder: local update + background sync
+  * Tambah refreshContents(): fetch ALL content dari Supabase (active + inactive), merge dengan default content
+  * Tambah isLoading & lastRefreshedAt state
+  * Update partialize untuk persist ke localStorage
+- Update EditWebsiteView.tsx:
+  * Tambah refreshContents on mount (admin)
+  * handleSubmit: async, await addContent/updateContent, lalu refreshContents untuk ensure sync
+  * handleConfirmDelete: async dengan refresh setelah delete
+  * Fix pre-existing TS error di line 1159 (form.contentType !== "banner" comparison)
+- Rewrite VideoEdukasiView.tsx:
+  * Hapus hardcoded MEDIA_ITEMS array
+  * Fetch dari useContentStore (Supabase-backed)
+  * Tambah useEffect untuk refreshContents on mount
+  * Convert EducationalContent → MediaItem dengan helper function
+  * Support video (upload/youtube/external), PDF, image, dan article
+  * Tambah YouTube ID extractor untuk berbagai format URL
+  * Tambah thumbnail support untuk video/image
+  * Tambah article reader dialog
+  * Tambah empty state dengan loading spinner
+  * Update catatan untuk mention admin dapat kelola via EditWebsite
+- Build sukses tanpa error TypeScript.
+
+Stage Summary:
+- Admin sekarang bisa menambah/mengubah/menghapus konten (video, PDF, gambar, artikel) di EditWebsite
+- Konten otomatis tersimpan ke Supabase dan muncul di halaman Video dan Media Edukasi
+- Auto-deploy ke production via GitHub push (Vercel akan rebuild otomatis)
+- SQL fix perlu dijalankan user di Supabase Dashboard: supabase-fix-content-rls.sql
+- Setelah SQL dijalankan, admin bisa langsung tambah konten dari dashboard dan akan otomatis tampil di website publik.
