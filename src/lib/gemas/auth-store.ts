@@ -414,15 +414,60 @@ async function fetchAndFixProfileUUID(email: string, currentLocalId: string): Pr
     }
 
     const realUserId = profileRow.id;
+
+    // Get current state to check if we have local data that's missing in Supabase
+    const state = useAuthStore.getState();
+    const localUser = state.users.find(
+      (u) => u.email.toLowerCase() === email.toLowerCase() && u.role === "user"
+    );
+
+    // Check if profile in Supabase is missing nomor_telepon or alamat
+    // but we have them locally - update Supabase
+    if (localUser) {
+      const updateFields: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      let needsUpdate = false;
+      if (!profileRow.nomor_telepon && localUser.nomorTelepon) {
+        updateFields.nomor_telepon = localUser.nomorTelepon;
+        needsUpdate = true;
+      }
+      if (!profileRow.alamat && localUser.alamat) {
+        updateFields.alamat = localUser.alamat;
+        needsUpdate = true;
+      }
+      if (needsUpdate) {
+        try {
+          await supabase
+            .from("profiles")
+            .update(updateFields)
+            .eq("id", realUserId);
+          console.log("[fetchAndFixProfileUUID] updated missing profile fields in Supabase");
+        } catch (e) {
+          console.warn("[fetchAndFixProfileUUID] profile update exception:", e);
+        }
+      }
+    }
+
     if (realUserId === currentLocalId) {
-      // Already correct, nothing to fix
+      // UUID is already correct, but we may have updated fields above
+      // Also update local user with Supabase data
+      useAuthStore.setState((s) => ({
+        users: s.users.map((u) =>
+          u.id === realUserId
+            ? {
+                ...u,
+                namaOrangTua: profileRow.nama_orang_tua || u.namaOrangTua,
+                nomorTelepon: profileRow.nomor_telepon || u.nomorTelepon,
+                alamat: profileRow.alamat || u.alamat,
+              }
+            : u
+        ),
+      }));
       return;
     }
 
     console.log("[fetchAndFixProfileUUID] Fixing UUID:", currentLocalId, "→", realUserId);
 
-    // Get current state
-    const state = useAuthStore.getState();
+    // Get local children
     const localChildren = state.children.filter((c) => c.userId === currentLocalId);
 
     // Update currentUserId and re-tag local children
@@ -553,6 +598,7 @@ export const useAuthStore = create<AuthState>()(
 
           // Fire signUp to Supabase in background
           void (async () => {
+            let supabaseUserId: string | null = null;
             try {
               const { data: signUpData, error } = await supabase.auth.signUp({
                 email: emailLower,
@@ -574,6 +620,7 @@ export const useAuthStore = create<AuthState>()(
               // Cache the new profile locally so the user can log in
               // immediately after registration.
               if (signUpData.user) {
+                supabaseUserId = signUpData.user.id;
                 const now = new Date().toISOString();
                 const cachedProfile: UserProfile = {
                   id: signUpData.user.id,
@@ -581,20 +628,41 @@ export const useAuthStore = create<AuthState>()(
                   email: emailLower,
                   nomorTelepon: data.nomorTelepon.trim(),
                   alamat: data.alamat.trim(),
-                  passwordHash: "",
+                  passwordHash: simpleHash(data.password),
                   role: "user",
                   createdAt: signUpData.user.created_at || now,
                   updatedAt: now,
                 };
                 set((state) => ({
                   users: [
-                    ...state.users.filter((u) => u.id !== cachedProfile.id),
+                    ...state.users.filter((u) => u.id !== cachedProfile.id && u.email !== emailLower),
                     cachedProfile,
                   ],
                 }));
               }
             } catch (err) {
               console.error("[Supabase register] exception:", err);
+            }
+
+            // Also UPSERT the profiles table directly with all fields
+            // This is a backup in case the trigger doesn't save nomor_telepon/alamat
+            if (supabaseUserId) {
+              try {
+                await supabase
+                  .from("profiles")
+                  .upsert({
+                    id: supabaseUserId,
+                    email: emailLower,
+                    nama_orang_tua: data.namaOrangTua.trim(),
+                    nomor_telepon: data.nomorTelepon.trim(),
+                    alamat: data.alamat.trim(),
+                    role: "user",
+                    updated_at: new Date().toISOString(),
+                  }, { onConflict: "id" });
+                console.log("[Supabase register] profile upserted with all fields");
+              } catch (upsertErr) {
+                console.warn("[Supabase register] profile upsert exception:", upsertErr);
+              }
             }
           })();
 
@@ -754,7 +822,44 @@ export const useAuthStore = create<AuthState>()(
 
               if (profileRow) {
                 profile = mapProfileRow(profileRow as ProfileRow, signInData.user.email);
+
+                // Check if nomor_telepon or alamat are missing in the profile
+                // If so, update them from user metadata (fixes old registrations)
+                const userMeta = signInData.user.user_metadata || {};
+                const metaTelepon = (userMeta.nomor_telepon as string) || "";
+                const metaAlamat = (userMeta.alamat as string) || "";
+                const needsUpdate =
+                  (!profileRow.nomor_telepon && metaTelepon) ||
+                  (!profileRow.alamat && metaAlamat);
+
+                if (needsUpdate) {
+                  // Update the profile with missing fields
+                  const updateFields: Record<string, unknown> = { updated_at: new Date().toISOString() };
+                  if (!profileRow.nomor_telepon && metaTelepon) updateFields.nomor_telepon = metaTelepon;
+                  if (!profileRow.alamat && metaAlamat) updateFields.alamat = metaAlamat;
+
+                  void (async () => {
+                    try {
+                      await supabase
+                        .from("profiles")
+                        .update(updateFields)
+                        .eq("id", userId);
+                      console.log("[Supabase login] updated missing profile fields");
+                    } catch (e) {
+                      console.warn("[Supabase login] profile update exception:", e);
+                    }
+                  })();
+
+                  // Also update local profile
+                  profile = {
+                    ...profile,
+                    nomorTelepon: profile.nomorTelepon || metaTelepon,
+                    alamat: profile.alamat || metaAlamat,
+                  };
+                }
               } else {
+                // Profile doesn't exist in profiles table - create it
+                // This can happen if the trigger failed
                 profile = {
                   id: userId,
                   namaOrangTua: (signInData.user.user_metadata?.nama_orang_tua as string) || "",
@@ -766,6 +871,26 @@ export const useAuthStore = create<AuthState>()(
                   createdAt: signInData.user.created_at || new Date().toISOString(),
                   updatedAt: new Date().toISOString(),
                 };
+
+                // Insert profile into profiles table
+                void (async () => {
+                  try {
+                    await supabase
+                      .from("profiles")
+                      .upsert({
+                        id: userId,
+                        email: signInData.user.email || emailLower,
+                        nama_orang_tua: profile!.namaOrangTua,
+                        nomor_telepon: profile!.nomorTelepon,
+                        alamat: profile!.alamat,
+                        role: "user",
+                        updated_at: new Date().toISOString(),
+                      }, { onConflict: "id" });
+                    console.log("[Supabase login] created missing profile");
+                  } catch (e) {
+                    console.warn("[Supabase login] profile upsert exception:", e);
+                  }
+                })();
               }
             } catch (err) {
               console.warn("[Supabase login] profile fetch exception:", err);
