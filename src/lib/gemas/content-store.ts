@@ -196,6 +196,25 @@ export const useContentStore = create<ContentState>()(
           return { success: false, message: "Jenis konten wajib dipilih." };
         }
 
+        // Check if mediaUrl is a large data URL (file upload)
+        // Supabase REST API has a body size limit (~1MB for free tier)
+        // Large data URLs will cause INSERT to fail
+        if (data.mediaUrl && data.mediaUrl.startsWith("data:")) {
+          const sizeInBytes = Math.ceil((data.mediaUrl.length * 3) / 4); // base64 to bytes
+          const sizeInMB = sizeInBytes / (1024 * 1024);
+          if (sizeInMB > 1) {
+            // For videos, suggest using YouTube URL instead
+            if (data.contentType === "video") {
+              return {
+                success: false,
+                message: `Ukuran file video terlalu besar (${sizeInMB.toFixed(1)} MB). Maksimal 1 MB untuk upload langsung. Silakan gunakan URL YouTube sebagai gantinya (pilih sumber "YouTube" dan masukkan link YouTube).`,
+              };
+            }
+            // For images/PDFs, warn but still try
+            console.warn(`[addContent] Large file detected: ${sizeInMB.toFixed(1)} MB. May fail to sync to Supabase.`);
+          }
+        }
+
         const now = new Date().toISOString();
         const localId = generateId();
         const newContent: EducationalContent = {
