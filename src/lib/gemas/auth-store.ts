@@ -296,7 +296,7 @@ interface AuthState {
     password: string;
   }) => { success: boolean; message: string };
 
-  login: (email: string, password: string) => { success: boolean; message: string };
+  login: (email: string, password: string) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
 
   adminLogin: (email: string, password: string) => { success: boolean; message: string };
@@ -623,7 +623,7 @@ export const useAuthStore = create<AuthState>()(
         return { success: true, message: "Registrasi berhasil. Silakan login." };
       },
 
-      login: (email, password) => {
+      login: async (email, password) => {
         const emailLower = email.toLowerCase().trim();
 
         if (!emailLower) {
@@ -634,6 +634,9 @@ export const useAuthStore = create<AuthState>()(
         }
 
         if (isSupabaseConfigured && supabase) {
+          // Set loading state
+          set({ isAuthLoading: true, authError: null });
+
           // Check if user exists in localStorage (from previous registration)
           const { users } = get();
           const matchingUsers = users.filter(
@@ -645,50 +648,43 @@ export const useAuthStore = create<AuthState>()(
             (u) => u.passwordHash && u.passwordHash === simpleHash(password)
           );
 
+          // =====================================================
+          // PATH 1: User found in localStorage (optimistic login)
+          // =====================================================
           if (localUser) {
-            // AMONG ALL MATCHING USERS, prefer the one with a Supabase Auth UUID
-            // (i.e., the entry created at registration time when signUpData.user.id was cached).
-            // This is critical: children table has FK to profiles(id), so we MUST use
-            // the real Supabase UUID, not the local-generated one.
+            // Among all matching users, prefer the one with a Supabase Auth UUID
             const supabaseUser = matchingUsers.find(
               (u) =>
                 u.id !== localUser.id &&
                 /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(u.id)
             );
 
-            // Use Supabase UUID if available; otherwise fall back to local ID
             const realUserId = supabaseUser?.id || localUser.id;
 
-            // Merge: keep the Supabase UUID + the passwordHash (for future logins)
             const mergedUser: UserProfile = {
               ...(supabaseUser || localUser),
               id: realUserId,
               passwordHash: localUser.passwordHash,
             };
 
+            // Set currentUserId IMMEDIATELY (optimistic)
             set((state) => ({
               currentUserId: realUserId,
               isAdmin: false,
               isAuthLoading: false,
               authError: null,
-              // Replace all matching users with the single merged user
               users: [
                 ...state.users.filter(
                   (u) => u.email.toLowerCase() !== emailLower || u.role !== "user"
                 ),
                 mergedUser,
               ],
-              // Re-tag any local children that were saved with the old local ID
               children: state.children.map((c) =>
                 c.userId === localUser.id ? { ...c, userId: realUserId } : c
               ),
             }));
 
-            // Sync with Supabase in background:
-            // 1. Sign in to get a valid auth session
-            // 2. Fetch the REAL profile UUID from profiles table by email
-            //    (in case localStorage has stale/wrong UUID)
-            // 3. Update currentUserId to match the real Supabase UUID
+            // Background sync with Supabase (non-blocking)
             void (async () => {
               try {
                 const { data: signInData, error } =
@@ -699,22 +695,17 @@ export const useAuthStore = create<AuthState>()(
 
                 if (error) {
                   console.warn("[Supabase login sync] error:", error.message);
-                  // Don't clear local login - user is already in
-                  // But try to fetch profile by email anyway (anon can read profiles)
                   await fetchAndFixProfileUUID(emailLower, localUser.id);
                   return;
                 }
 
                 if (signInData.user) {
-                  // Set currentUserId to the Supabase Auth UUID
                   set({ currentUserId: signInData.user.id });
-                  // Also verify against profiles table
                   await fetchAndFixProfileUUID(emailLower, signInData.user.id);
                   await get().refreshData();
                 }
               } catch (err) {
                 console.warn("[Supabase login sync] exception:", err);
-                // Try to fetch profile by email anyway
                 await fetchAndFixProfileUUID(emailLower, localUser.id);
               }
             })();
@@ -722,85 +713,93 @@ export const useAuthStore = create<AuthState>()(
             return { success: true, message: "Login berhasil." };
           }
 
-          // Not found in localStorage - try Supabase directly
-          // We need to return synchronously, so we'll use a different approach:
-          // Set loading state and return a "pending" message
-          set({ isAuthLoading: true, authError: null });
+          // =====================================================
+          // PATH 2: User NOT in localStorage - try Supabase Auth directly
+          // This is now ASYNC and awaits the result before returning
+          // =====================================================
+          try {
+            const { data: signInData, error } =
+              await supabase.auth.signInWithPassword({
+                email: emailLower,
+                password,
+              });
 
-          // Fire async login
-          void (async () => {
-            try {
-              const { data: signInData, error } =
-                await supabase.auth.signInWithPassword({
-                  email: emailLower,
-                  password,
-                });
-
-              if (error || !signInData.user) {
-                console.error("[Supabase login] error:", error?.message);
-                set({
-                  currentUserId: null,
-                  isAuthLoading: false,
-                  authError: error?.message || "Login gagal.",
-                });
-                return;
-              }
-
-              const userId = signInData.user.id;
-
-              // Fetch profile
-              let profile: UserProfile | null = null;
-              try {
-                const { data: profileRow } = await supabase
-                  .from("profiles")
-                  .select("*")
-                  .eq("id", userId)
-                  .maybeSingle();
-
-                if (profileRow) {
-                  profile = mapProfileRow(profileRow as ProfileRow, signInData.user.email);
-                } else {
-                  profile = {
-                    id: userId,
-                    namaOrangTua: (signInData.user.user_metadata?.nama_orang_tua as string) || "",
-                    email: signInData.user.email || emailLower,
-                    nomorTelepon: (signInData.user.user_metadata?.nomor_telepon as string) || "",
-                    alamat: (signInData.user.user_metadata?.alamat as string) || "",
-                    passwordHash: "",
-                    role: "user",
-                    createdAt: signInData.user.created_at || new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                  };
-                }
-              } catch (err) {
-                console.warn("[Supabase login] profile fetch exception:", err);
-              }
-
-              set((state) => ({
-                currentUserId: userId,
-                isAuthLoading: false,
-                authError: null,
-                users: profile
-                  ? [
-                      ...state.users.filter((u) => u.id !== userId),
-                      profile!,
-                    ]
-                  : state.users,
-              }));
-
-              await get().refreshData();
-            } catch (err) {
-              console.error("[Supabase login] exception:", err);
+            if (error || !signInData.user) {
+              console.error("[Supabase login] error:", error?.message);
               set({
                 currentUserId: null,
                 isAuthLoading: false,
-                authError: err instanceof Error ? err.message : "Login gagal.",
+                authError: error?.message || "Login gagal.",
               });
+              // Provide user-friendly error message
+              let userMessage = error?.message || "Login gagal.";
+              if (error?.message.includes("Invalid login credentials")) {
+                userMessage = "Email atau password salah. Periksa kembali data Anda.";
+              } else if (error?.message.includes("Email not confirmed")) {
+                userMessage = "Email belum dikonfirmasi. Cek email Anda untuk link konfirmasi.";
+              }
+              return { success: false, message: userMessage };
             }
-          })();
 
-          // Return pending - LoginView needs to handle this
-          return { success: true, message: "Login sedang diproses..." };
+            const userId = signInData.user.id;
+
+            // Fetch profile
+            let profile: UserProfile | null = null;
+            try {
+              const { data: profileRow } = await supabase
+                .from("profiles")
+                .select("*")
+                .eq("id", userId)
+                .maybeSingle();
+
+              if (profileRow) {
+                profile = mapProfileRow(profileRow as ProfileRow, signInData.user.email);
+              } else {
+                profile = {
+                  id: userId,
+                  namaOrangTua: (signInData.user.user_metadata?.nama_orang_tua as string) || "",
+                  email: signInData.user.email || emailLower,
+                  nomorTelepon: (signInData.user.user_metadata?.nomor_telepon as string) || "",
+                  alamat: (signInData.user.user_metadata?.alamat as string) || "",
+                  passwordHash: simpleHash(password),
+                  role: "user",
+                  createdAt: signInData.user.created_at || new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                };
+              }
+            } catch (err) {
+              console.warn("[Supabase login] profile fetch exception:", err);
+            }
+
+            set((state) => ({
+              currentUserId: userId,
+              isAdmin: false,
+              isAuthLoading: false,
+              authError: null,
+              users: profile
+                ? [
+                    ...state.users.filter((u) => u.id !== userId),
+                    profile!,
+                  ]
+                : state.users,
+            }));
+
+            // Refresh data in background (don't block login return)
+            void get().refreshData();
+
+            return { success: true, message: "Login berhasil." };
+          } catch (err) {
+            console.error("[Supabase login] exception:", err);
+            set({
+              currentUserId: null,
+              isAuthLoading: false,
+              authError: err instanceof Error ? err.message : "Login gagal.",
+            });
+            return {
+              success: false,
+              message: err instanceof Error ? err.message : "Login gagal. Coba lagi.",
+            };
+          }
         }
 
         // ----- localStorage fallback -----
@@ -812,7 +811,7 @@ export const useAuthStore = create<AuthState>()(
         if (user.passwordHash !== simpleHash(password)) {
           return { success: false, message: "Password salah." };
         }
-        set({ currentUserId: user.id, isAdmin: false });
+        set({ currentUserId: user.id, isAdmin: false, isAuthLoading: false });
         return { success: true, message: "Login berhasil." };
       },
 

@@ -78,16 +78,16 @@ export function LoginView() {
 
     setLoading(true);
     try {
-      const result = login(email, password);
+      // login() is now async - await the result
+      // This ensures currentUserId is set BEFORE we navigate to dashboard
+      const result = await login(email, password);
       if (result.success) {
         toast({
           title: "Login berhasil",
           description: "Selamat datang kembali di Koniciwa Gemas Gempita.",
         });
-        // Small delay to allow state to settle before navigating
-        setTimeout(() => {
-          setView("user-dashboard");
-        }, 300);
+        // Navigate to dashboard immediately - currentUserId is already set
+        setView("user-dashboard");
       } else {
         toast({
           title: "Login gagal",
@@ -95,6 +95,13 @@ export function LoginView() {
           variant: "destructive",
         });
       }
+    } catch (err) {
+      console.error("Login error:", err);
+      toast({
+        title: "Error",
+        description: "Terjadi kesalahan saat login. Coba lagi.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }

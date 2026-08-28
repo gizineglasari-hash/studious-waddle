@@ -80,6 +80,7 @@ export function UserDashboardView() {
     updateProfile,
   } = useAuthStore();
   const refreshData = useAuthStore((s) => s.refreshData);
+  const currentUserId = useAuthStore((s) => s.currentUserId);
 
   const user = getCurrentUser();
   const isAuthLoading = useAuthStore((s) => s.isAuthLoading);
@@ -116,16 +117,25 @@ export function UserDashboardView() {
   const [showNotif, setShowNotif] = useState(false);
 
   // Redirect if not logged in
+  // Use currentUserId from store (reactive) instead of getCurrentUser() (snapshot)
+  // This ensures we redirect immediately when user logs out, but don't redirect
+  // prematurely during async login
   useEffect(() => {
+    // If auth is still loading, wait
     if (isAuthLoading) return;
-    if (user) return;
+    // If we have a currentUserId, user is logged in - don't redirect
+    if (currentUserId) return;
+    // No user and not loading - redirect after a longer delay (2 seconds)
+    // This gives time for async login to complete in edge cases
     const timer = setTimeout(() => {
-      if (!getCurrentUser()) {
+      // Re-check currentUserId from the store directly
+      const latestUserId = useAuthStore.getState().currentUserId;
+      if (!latestUserId) {
         setView("login");
       }
-    }, 500);
+    }, 2000);
     return () => clearTimeout(timer);
-  }, [user, isAuthLoading, setView, getCurrentUser]);
+  }, [currentUserId, isAuthLoading, setView]);
 
   // Sync profile form when user changes
   useEffect(() => {
