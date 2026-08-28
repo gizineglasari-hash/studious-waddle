@@ -122,6 +122,57 @@ export function VideoEdukasiView() {
     refreshContents();
   }, [refreshContents]);
 
+  // Helper: open PDF in new tab (handles both file paths and data URLs)
+  // Browsers block very large data URLs (>2MB) in href, so we convert to blob URL
+  const openPdf = (pdf: MediaItem) => {
+    if (!pdf.pdfPath) return;
+
+    if (pdf.pdfPath.startsWith("data:")) {
+      try {
+        const [meta, base64Data] = pdf.pdfPath.split(",");
+        const mimeMatch = meta.match(/data:(.*?);base64/);
+        const mimeType = mimeMatch ? mimeMatch[1] : "application/pdf";
+        const binaryString = atob(base64Data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: mimeType });
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, "_blank");
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+      } catch (err) {
+        console.error("Failed to open PDF:", err);
+        alert("Gagal membuka PDF. Coba unduh file tersebut.");
+      }
+    } else {
+      window.open(pdf.pdfPath, "_blank");
+    }
+  };
+
+  // Helper: download PDF
+  const downloadPdf = (pdf: MediaItem) => {
+    if (!pdf.pdfPath) return;
+    const fileName = `${pdf.judul || "document"}.pdf`;
+
+    if (pdf.pdfPath.startsWith("data:")) {
+      const link = document.createElement("a");
+      link.href = pdf.pdfPath;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      const link = document.createElement("a");
+      link.href = pdf.pdfPath;
+      link.download = fileName;
+      link.target = "_blank";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   // Convert contents to media items, filtered by type and active status
   const { videoItems, pdfItems, imageItems, articleItems } = useMemo(() => {
     const activeContents = contents.filter((c) => c.isActive);
@@ -260,24 +311,20 @@ export function VideoEdukasiView() {
                             <>
                               <Button
                                 size="sm"
-                                asChild
+                                onClick={() => openPdf(pdf)}
                                 className="bg-blue-600 hover:bg-blue-700 text-white rounded-full"
                               >
-                                <a href={pdf.pdfPath} target="_blank" rel="noopener noreferrer">
-                                  <ExternalLink className="h-4 w-4 mr-1.5" />
-                                  Lihat PDF
-                                </a>
+                                <ExternalLink className="h-4 w-4 mr-1.5" />
+                                Lihat PDF
                               </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
-                                asChild
+                                onClick={() => downloadPdf(pdf)}
                                 className="rounded-full border-blue-300 text-blue-700 hover:bg-blue-50"
                               >
-                                <a href={pdf.pdfPath} download>
-                                  <Download className="h-4 w-4 mr-1.5" />
-                                  Unduh
-                                </a>
+                                <Download className="h-4 w-4 mr-1.5" />
+                                Unduh
                               </Button>
                             </>
                           )}
