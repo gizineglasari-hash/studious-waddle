@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Menu, X, Bell, User, LogOut, ChevronDown, LayoutDashboard } from "lucide-react";
+import { Menu, X, Heart, Activity, Bell, User, LogOut, ChevronDown, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -69,12 +69,11 @@ export function Navbar() {
             className="flex items-center gap-2 group flex-shrink-0"
             aria-label="GEMAS Beranda"
           >
-            <div className="relative h-11 w-11 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow overflow-hidden flex-shrink-0">
-              <img
-                src="/images/logo-koniciwa.jpg"
-                alt="Logo Koniciwa Gemas Gempita"
-                className="h-full w-full object-cover"
-              />
+            <div className="relative h-10 w-10 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow">
+              <Heart className="h-5 w-5 text-white" fill="white" />
+              <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-amber-400 flex items-center justify-center">
+                <Activity className="h-2.5 w-2.5 text-amber-900" strokeWidth={3} />
+              </span>
             </div>
             <div className="text-left leading-tight">
               <div className="font-heading text-lg sm:text-xl font-extrabold text-green-700">
