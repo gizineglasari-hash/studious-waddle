@@ -1,6 +1,6 @@
 "use client";
 
-import { Heart, MapPin, Phone, Mail } from "lucide-react";
+import { MapPin, Phone, Mail } from "lucide-react";
 import { useGemasStore, type ViewKey } from "@/lib/gemas/store";
 import { PUSKESMAS } from "@/lib/gemas/contacts";
 
@@ -23,8 +23,12 @@ export function Footer() {
           {/* Brand */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-md">
-                <Heart className="h-4 w-4 text-white" fill="white" />
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-md overflow-hidden">
+                <img
+                  src="/images/logo-koniciwa.jpg"
+                  alt="Logo Koniciwa Gemas Gempita"
+                  className="h-full w-full object-cover"
+                />
               </div>
               <div>
                 <div className="font-heading text-base sm:text-lg font-extrabold text-green-700">
